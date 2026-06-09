@@ -7,8 +7,42 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@9.15.2 --activate
 
 WORKDIR /app
-COPY . .
+
+RUN mkdir -p \
+    packages/BilibiliRecorder \
+    packages/CLI \
+    packages/DouYinDanma \
+    packages/DouYinRecorder \
+    packages/DouYuRecorder \
+    packages/HuYaRecorder \
+    packages/StreamGet \
+    packages/XHSRecorder \
+    packages/app \
+    packages/http \
+    packages/huya-danmu \
+    packages/liveManager \
+    packages/shared \
+    packages/types
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
+COPY packages/BilibiliRecorder/package.json ./packages/BilibiliRecorder/package.json
+COPY packages/CLI/package.json ./packages/CLI/package.json
+COPY packages/DouYinDanma/package.json ./packages/DouYinDanma/package.json
+COPY packages/DouYinRecorder/package.json ./packages/DouYinRecorder/package.json
+COPY packages/DouYuRecorder/package.json ./packages/DouYuRecorder/package.json
+COPY packages/HuYaRecorder/package.json ./packages/HuYaRecorder/package.json
+COPY packages/StreamGet/package.json ./packages/StreamGet/package.json
+COPY packages/XHSRecorder/package.json ./packages/XHSRecorder/package.json
+COPY packages/app/package.json ./packages/app/package.json
+COPY packages/http/package.json ./packages/http/package.json
+COPY packages/huya-danmu/package.json ./packages/huya-danmu/package.json
+COPY packages/liveManager/package.json ./packages/liveManager/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/types/package.json ./packages/types/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
+
+COPY . .
 
 # ============================================
 # 前端构建阶段
@@ -30,8 +64,8 @@ RUN pnpm run build:base && pnpm run --filter bililive-cli build && cd packages/C
 RUN pnpm run install:bin
 
 # 下载字体文件
-RUN curl -L -o /usr/local/share/fonts/NotoSansSC-Regular.ttf https://github.com/renmu123/biliLive-tools/releases/download/0.2.1/NotoSansSC-Regular.ttf && \
-    curl -L -o /usr/local/share/fonts/NotoEmoji-Regular.ttf https://github.com/renmu123/biliLive-tools/releases/download/0.2.1/NotoEmoji-Regular.ttf
+RUN curl -L -o /usr/local/share/fonts/NotoSansSC-Regular.ttf https://github.com/owen1190/biliLive-tools/releases/download/0.2.1/NotoSansSC-Regular.ttf && \
+    curl -L -o /usr/local/share/fonts/NotoEmoji-Regular.ttf https://github.com/owen1190/biliLive-tools/releases/download/0.2.1/NotoEmoji-Regular.ttf
 
 # 下载 https://github.com/qjfoidnh/BaiduPCS-Go 二进制文件
 RUN mkdir -p /app/baidu-temp && \

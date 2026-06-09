@@ -3,3 +3,13 @@ npm-debug.log
 Dockerfile
 .dockerignore
 .git
+.github
+.vscode
+.agents
+.codex
+.DS_Store
+docs
+coverage
+dist
+**/node_modules
+**/npm-debug.log

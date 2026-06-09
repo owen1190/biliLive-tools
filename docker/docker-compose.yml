@@ -1,13 +1,13 @@
 services:
   # UI镜像
   webui:
-    image: renmu1234/bililive-tools-frontend
+    image: owen1190/bililive-tools-frontend
     ports:
       # 前者按需改动
       - "3000:3000"
   # 接口镜像
   api:
-    image: renmu1234/bililive-tools-backend
+    image: owen1190/bililive-tools-backend
     ports:
       - "18010:18010"
     volumes:
