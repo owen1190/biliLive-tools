@@ -26,5 +26,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json --composite false",
     "test": "vitest run"
   },
-  "keywords": []
+  "keywords": [],
+  "dependencies": {
+    "@renmu/bili-api": "2.14.0",
+    "arktype": "^2.1.2"
+  }
 }

@@ -738,7 +738,14 @@ importers:
         specifier: ^6.4.17
         version: 6.4.17
 
-  packages/types: {}
+  packages/types:
+    dependencies:
+      '@renmu/bili-api':
+        specifier: 2.14.0
+        version: 2.14.0
+      arktype:
+        specifier: ^2.1.2
+        version: 2.1.2
 
 packages:
 
