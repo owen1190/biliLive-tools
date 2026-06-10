@@ -36,12 +36,20 @@
     "@koa/bodyparser": "^5.1.1",
     "@koa/cors": "^5.0.0",
     "@koa/router": "^14.0.0",
+    "@renmu/bili-api": "2.14.0",
+    "axios": "catalog:",
+    "check-disk-space": "^3.4.0",
     "chokidar": "^3.6.0",
     "cli-progress": "^3.12.0",
+    "fs-extra": "^11.2.0",
+    "jszip": "^3.10.1",
     "koa": "^2.15.3",
     "koa-sse-stream": "^0.2.0",
+    "lodash-es": "catalog:",
     "multer": "1.4.5-lts.1",
+    "semver": "^7.6.3",
     "subtitle": "^4.2.1",
+    "uuid": "^10.0.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
@@ -49,6 +57,8 @@
     "@types/cli-progress": "^3.11.6",
     "@types/koa": "^2.15.0",
     "@types/koa__router": "^12.0.5",
+    "awilix": "^11.0.4",
+    "music-segment-detector": "^0.3.1",
     "tsx": "^4.19.2"
   }
 }

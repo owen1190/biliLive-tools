@@ -537,24 +537,48 @@ importers:
       '@koa/router':
         specifier: ^14.0.0
         version: 14.0.0
+      '@renmu/bili-api':
+        specifier: 2.14.0
+        version: 2.14.0
+      axios:
+        specifier: 'catalog:'
+        version: 1.15.0
+      check-disk-space:
+        specifier: ^3.4.0
+        version: 3.4.0
       chokidar:
         specifier: ^3.6.0
         version: 3.6.0
       cli-progress:
         specifier: ^3.12.0
         version: 3.12.0
+      fs-extra:
+        specifier: ^11.2.0
+        version: 11.2.0
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       koa:
         specifier: ^2.15.3
         version: 2.15.3
       koa-sse-stream:
         specifier: ^0.2.0
         version: 0.2.0
+      lodash-es:
+        specifier: 'catalog:'
+        version: 4.17.21
       multer:
         specifier: 1.4.5-lts.1
         version: 1.4.5-lts.1
+      semver:
+        specifier: ^7.6.3
+        version: 7.6.3
       subtitle:
         specifier: ^4.2.1
         version: 4.2.1
+      uuid:
+        specifier: ^10.0.0
+        version: 10.0.0
       ws:
         specifier: ^8.18.0
         version: 8.18.0(bufferutil@4.0.8)(utf-8-validate@6.0.5)
@@ -571,6 +595,12 @@ importers:
       '@types/koa__router':
         specifier: ^12.0.5
         version: 12.0.5
+      awilix:
+        specifier: ^11.0.4
+        version: 11.0.4
+      music-segment-detector:
+        specifier: ^0.3.1
+        version: 0.3.1(rollup@4.52.4)
       tsx:
         specifier: ^4.19.2
         version: 4.19.2
