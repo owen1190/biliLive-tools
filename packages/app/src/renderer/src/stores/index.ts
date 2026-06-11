@@ -1,4 +1,4 @@
-import { cloneDeep, isArray } from "lodash-es";
+import { cloneDeep } from "lodash-es";
 import { v4 as uuid } from "uuid";
 import { defineStore, storeToRefs } from "pinia";
 import { DanmuPreset, BiliupPreset, AppConfig } from "@biliLive-tools/types";
@@ -196,7 +196,7 @@ export const useQueueStore = defineStore("queue", () => {
       runningTaskNum: number;
     };
     // 为了web的兼容性考虑
-    if (isArray(res)) {
+    if (Array.isArray(res)) {
       queue.value = res.reverse();
     } else {
       queue.value = res.list.reverse();
