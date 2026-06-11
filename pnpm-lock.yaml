@@ -317,6 +317,9 @@ importers:
       '@renmu/node-shazam':
         specifier: ^2.0.3
         version: 2.0.3
+      awilix:
+        specifier: ^11.0.4
+        version: 11.0.4
       better-sqlite3:
         specifier: 'catalog:'
         version: 12.6.2
