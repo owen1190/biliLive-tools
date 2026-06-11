@@ -58,7 +58,7 @@ RUN pnpm run build:webui
 # 后端构建阶段
 # ============================================
 FROM base AS backend-build
-RUN pnpm run build:base && pnpm run --filter bililive-cli build && cd packages/CLI && node ./scripts/removeDev.js && npm install --force
+RUN pnpm run build:base && pnpm run --filter bililive-cli build && pnpm run --filter bililive-cli movePackage
 
 # 下载二进制依赖
 RUN pnpm run install:bin
@@ -121,7 +121,6 @@ WORKDIR /app
 RUN mkdir data && mkdir bin && mkdir video
 
 COPY --from=backend-build /app/packages/CLI/lib /app
-COPY --from=backend-build /app/packages/CLI/node_modules /app/node_modules
 COPY --from=backend-build /app/packages/app/resources/bin /app/bin
 
 RUN apt-get update && \
@@ -154,7 +153,6 @@ RUN mkdir -p /app/data /app/video /app/bin /app/backend /app/public
 
 # 复制后端
 COPY --from=backend-build /app/packages/CLI/lib /app/backend
-COPY --from=backend-build /app/packages/CLI/node_modules /app/backend/node_modules
 COPY --from=backend-build /app/packages/app/resources/bin /app/bin
 
 # 安装必要的依赖和 Caddy
