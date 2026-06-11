@@ -326,6 +326,9 @@ importers:
       bufferutil:
         specifier: ^4.0.8
         version: 4.0.8
+      dayjs:
+        specifier: ^1.11.18
+        version: 1.11.18
       electron-context-menu:
         specifier: 4.1.1
         version: 4.1.1

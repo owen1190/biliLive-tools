@@ -191,7 +191,10 @@ export const useQueueStore = defineStore("queue", () => {
   let checkTimer: number | null = null;
 
   const getQuenu = async () => {
-    const res = await taskApi.list(params.value);
+    const res = (await taskApi.list(params.value)) as Task[] | {
+      list: Task[];
+      runningTaskNum: number;
+    };
     // 为了web的兼容性考虑
     if (isArray(res)) {
       queue.value = res.reverse();
