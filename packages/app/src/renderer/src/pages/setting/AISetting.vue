@@ -339,6 +339,38 @@
                     placeholder="{room} - {time}"
                   />
                 </n-form-item>
+                <n-form-item v-if="config.ai.liveSummary.exportTargets.feishu.enabled">
+                  <template #label>
+                    <Tip
+                      tip="可为特定主播或房间号覆盖默认导出路径。优先匹配房间号；未命中时匹配只填写主播名的规则。"
+                      text="按主播覆盖路径"
+                    />
+                  </template>
+                  <n-dynamic-input
+                    v-model:value="config.ai.liveSummary.exportTargets.feishu.streamerOverrides"
+                    :on-create="createFeishuStreamerOverride"
+                  >
+                    <template #default="{ value }">
+                      <div class="streamer-override-row">
+                        <n-input v-model:value="value.streamer" placeholder="主播名" />
+                        <n-input v-model:value="value.roomId" placeholder="房间号（优先）" />
+                        <n-input
+                          v-if="
+                            (config.ai.liveSummary.exportTargets.feishu.mode || 'append') ===
+                            'append'
+                          "
+                          v-model:value="value.documentId"
+                          placeholder="飞书文档 ID/链接"
+                        />
+                        <n-input
+                          v-else
+                          v-model:value="value.folderToken"
+                          placeholder="飞书文件夹 Token/链接"
+                        />
+                      </div>
+                    </template>
+                  </n-dynamic-input>
+                </n-form-item>
                 <n-form-item>
                   <template #label>
                     <Tip
@@ -397,6 +429,26 @@
                     v-model:value="config.ai.liveSummary.exportTargets.notion.titleTemplate"
                     placeholder="{room} - {time}"
                   />
+                </n-form-item>
+                <n-form-item v-if="config.ai.liveSummary.exportTargets.notion.enabled">
+                  <template #label>
+                    <Tip
+                      tip="可为特定主播或房间号覆盖默认 Notion 页面或父页面。优先匹配房间号；未命中时匹配只填写主播名的规则。"
+                      text="按主播覆盖路径"
+                    />
+                  </template>
+                  <n-dynamic-input
+                    v-model:value="config.ai.liveSummary.exportTargets.notion.streamerOverrides"
+                    :on-create="createNotionStreamerOverride"
+                  >
+                    <template #default="{ value }">
+                      <div class="streamer-override-row">
+                        <n-input v-model:value="value.streamer" placeholder="主播名" />
+                        <n-input v-model:value="value.roomId" placeholder="房间号（优先）" />
+                        <n-input v-model:value="value.pageId" placeholder="Notion 页面 ID/链接" />
+                      </div>
+                    </template>
+                  </n-dynamic-input>
                 </n-form-item>
               </n-form>
             </n-collapse-item>
@@ -522,6 +574,13 @@ import { useConfirm } from "@renderer/hooks";
 import { uuid } from "@renderer/utils";
 import type { AppConfig } from "@biliLive-tools/types";
 
+type FeishuStreamerOverride = NonNullable<
+  AppConfig["ai"]["liveSummary"]["exportTargets"]["feishu"]["streamerOverrides"]
+>[number];
+type NotionStreamerOverride = NonNullable<
+  AppConfig["ai"]["liveSummary"]["exportTargets"]["notion"]["streamerOverrides"]
+>[number];
+
 const config = defineModel<AppConfig>("data", {
   default: () => ({
     ai: {
@@ -543,6 +602,7 @@ const config = defineModel<AppConfig>("data", {
             documentId: "",
             folderToken: "",
             titleTemplate: "{room} - {time}",
+            streamerOverrides: [],
           },
           notion: {
             enabled: false,
@@ -550,6 +610,7 @@ const config = defineModel<AppConfig>("data", {
             token: "",
             pageId: "",
             titleTemplate: "{room} - {time}",
+            streamerOverrides: [],
           },
         },
       },
@@ -559,6 +620,25 @@ const config = defineModel<AppConfig>("data", {
 
 const notice = useNotice();
 const confirm = useConfirm();
+
+watchEffect(() => {
+  const exportTargets = config.value.ai.liveSummary.exportTargets;
+  exportTargets.feishu.streamerOverrides ||= [];
+  exportTargets.notion.streamerOverrides ||= [];
+});
+
+const createFeishuStreamerOverride = (): FeishuStreamerOverride => ({
+  streamer: "",
+  roomId: "",
+  documentId: "",
+  folderToken: "",
+});
+
+const createNotionStreamerOverride = (): NotionStreamerOverride => ({
+  streamer: "",
+  roomId: "",
+  pageId: "",
+});
 
 const feishuExportModeOptions = [
   {

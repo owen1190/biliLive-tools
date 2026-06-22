@@ -31,6 +31,8 @@ export type SummaryExportResult =
 type LiveSummaryConfig = AppConfig["ai"]["liveSummary"] & {
   feishu?: AppConfig["ai"]["liveSummary"]["exportTargets"]["feishu"];
 };
+type FeishuExportConfig = AppConfig["ai"]["liveSummary"]["exportTargets"]["feishu"];
+type NotionExportConfig = AppConfig["ai"]["liveSummary"]["exportTargets"]["notion"];
 
 export function buildSummaryExportMarkdown(summary: string, input: SummaryExportContext) {
   const meta = [
@@ -122,6 +124,54 @@ function getFeishuConfig(config: LiveSummaryConfig) {
   return config.feishu;
 }
 
+function normalizeMatcherValue(value?: string) {
+  return value?.trim() || "";
+}
+
+function findStreamerOverride<T extends { streamer?: string; roomId?: string }>(
+  overrides: T[] | undefined,
+  input: SummaryExportContext,
+) {
+  const roomId = normalizeMatcherValue(input.roomId);
+  const streamer = normalizeMatcherValue(input.streamer);
+  if (!overrides?.length) return undefined;
+
+  if (roomId) {
+    const roomMatch = overrides.find(
+      (override) => normalizeMatcherValue(override.roomId) === roomId,
+    );
+    if (roomMatch) return roomMatch;
+  }
+
+  if (!streamer) return undefined;
+  return overrides.find(
+    (override) =>
+      !normalizeMatcherValue(override.roomId) &&
+      normalizeMatcherValue(override.streamer) === streamer,
+  );
+}
+
+function resolveFeishuConfig(config: FeishuExportConfig | undefined, input: SummaryExportContext) {
+  if (!config) return undefined;
+  const override = findStreamerOverride(config.streamerOverrides, input);
+  if (!override) return config;
+  return {
+    ...config,
+    documentId: override.documentId ?? config.documentId,
+    folderToken: override.folderToken ?? config.folderToken,
+  };
+}
+
+function resolveNotionConfig(config: NotionExportConfig | undefined, input: SummaryExportContext) {
+  if (!config) return undefined;
+  const override = findStreamerOverride(config.streamerOverrides, input);
+  if (!override) return config;
+  return {
+    ...config,
+    pageId: override.pageId ?? config.pageId,
+  };
+}
+
 export function getEnabledSummaryExportTargetNames(config: LiveSummaryConfig) {
   const names: string[] = [];
   const feishuConfig = getFeishuConfig(config);
@@ -138,8 +188,8 @@ export async function exportSummaryToTargets(
   const markdown = buildSummaryExportMarkdown(summary, input);
   const errors: string[] = [];
   const results: SummaryExportResult[] = [];
-  const feishuConfig = getFeishuConfig(config);
-  const notionConfig = config.exportTargets?.notion;
+  const feishuConfig = resolveFeishuConfig(getFeishuConfig(config), input);
+  const notionConfig = resolveNotionConfig(config.exportTargets?.notion, input);
 
   if (feishuConfig?.enabled) {
     const documentId = extractFeishuDocumentId(feishuConfig.documentId);

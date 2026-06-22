@@ -240,6 +240,199 @@ describe("summary export helpers", () => {
     ]);
   });
 
+  it("uses room-specific export targets before global targets", async () => {
+    const { exportSummaryToTargets } = await import("../../src/ai/summaryExport.js");
+
+    axiosMocks.client.post.mockResolvedValueOnce({
+      data: {
+        code: 0,
+        tenant_access_token: "tenant-token",
+        expire: 7200,
+      },
+    });
+    axiosMocks.client.request.mockResolvedValue({
+      data: {
+        code: 0,
+        msg: "ok",
+      },
+    });
+    axiosMocks.client.patch.mockResolvedValue({ data: {} });
+
+    await expect(
+      exportSummaryToTargets(
+        "总结内容",
+        { title: "直播标题", streamer: "主播A", roomId: "123" },
+        {
+          enabled: true,
+          prompt: "",
+          maxInputLength: 24000,
+          saveTranscript: true,
+          exportTargets: {
+            feishu: {
+              enabled: true,
+              mode: "append",
+              appId: "cli_xxx",
+              appSecret: "secret",
+              documentId: "globalDoc",
+              streamerOverrides: [
+                {
+                  streamer: "主播A",
+                  roomId: "123",
+                  documentId: "roomDoc",
+                },
+              ],
+            },
+            notion: {
+              enabled: true,
+              mode: "append",
+              token: "secret_xxx",
+              pageId: "00000000-0000-0000-0000-000000000000",
+              streamerOverrides: [
+                {
+                  streamer: "主播A",
+                  roomId: "123",
+                  pageId: "00000000-0000-0000-0000-000000000123",
+                },
+              ],
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual([
+      {
+        target: "feishu",
+        name: "飞书文档",
+        documentId: "roomDoc",
+        url: "https://feishu.cn/docx/roomDoc",
+        mode: "append",
+      },
+      {
+        target: "notion",
+        name: "Notion",
+        pageId: "00000000-0000-0000-0000-000000000123",
+        url: "https://www.notion.so/00000000000000000000000000000123",
+        mode: "append",
+      },
+    ]);
+
+    expect(axiosMocks.client.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/docx/v1/documents/roomDoc/blocks/roomDoc/children",
+      }),
+    );
+    expect(axiosMocks.client.patch).toHaveBeenCalledWith(
+      "/blocks/00000000-0000-0000-0000-000000000123/children",
+      expect.any(Object),
+    );
+  });
+
+  it("falls back to streamer-specific export targets when room id does not match", async () => {
+    const { exportSummaryToTargets } = await import("../../src/ai/summaryExport.js");
+
+    axiosMocks.client.post.mockResolvedValueOnce({
+      data: {
+        code: 0,
+        tenant_access_token: "tenant-token",
+        expire: 7200,
+      },
+    });
+    axiosMocks.client.request.mockResolvedValueOnce({
+      data: {
+        code: 0,
+        msg: "ok",
+        data: {
+          document: {
+            document_id: "createdDoc",
+          },
+        },
+      },
+    });
+    axiosMocks.client.request.mockResolvedValue({
+      data: {
+        code: 0,
+        msg: "ok",
+      },
+    });
+    axiosMocks.client.patch.mockResolvedValue({ data: {} });
+
+    await expect(
+      exportSummaryToTargets(
+        "总结内容",
+        { title: "直播标题", streamer: "主播B", roomId: "999" },
+        {
+          enabled: true,
+          prompt: "",
+          maxInputLength: 24000,
+          saveTranscript: true,
+          exportTargets: {
+            feishu: {
+              enabled: true,
+              mode: "create",
+              appId: "cli_xxx",
+              appSecret: "secret",
+              documentId: "globalDoc",
+              folderToken: "globalFolder",
+              streamerOverrides: [
+                {
+                  streamer: "主播B",
+                  roomId: "123",
+                  folderToken: "wrongRoomFolder",
+                },
+                {
+                  streamer: "主播B",
+                  folderToken: "streamerFolder",
+                },
+              ],
+            },
+            notion: {
+              enabled: true,
+              mode: "append",
+              token: "secret_xxx",
+              pageId: "00000000-0000-0000-0000-000000000000",
+              streamerOverrides: [
+                {
+                  streamer: "主播B",
+                  roomId: "123",
+                  pageId: "00000000-0000-0000-0000-000000000111",
+                },
+                {
+                  streamer: "主播B",
+                  pageId: "00000000-0000-0000-0000-000000000222",
+                },
+              ],
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual([
+      {
+        target: "feishu",
+        name: "飞书文档",
+        documentId: "createdDoc",
+        url: "https://feishu.cn/docx/createdDoc",
+        mode: "create",
+      },
+      {
+        target: "notion",
+        name: "Notion",
+        pageId: "00000000-0000-0000-0000-000000000222",
+        url: "https://www.notion.so/00000000000000000000000000000222",
+        mode: "append",
+      },
+    ]);
+
+    expect(axiosMocks.client.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ folder_token: "streamerFolder" }),
+        url: "/docx/v1/documents",
+      }),
+    );
+    expect(axiosMocks.client.patch).toHaveBeenCalledWith(
+      "/blocks/00000000-0000-0000-0000-000000000222/children",
+      expect.any(Object),
+    );
+  });
+
   it("validates feishu create mode folder token", async () => {
     const { exportSummaryToTargets } = await import("../../src/ai/summaryExport.js");
 

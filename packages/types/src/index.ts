@@ -373,6 +373,19 @@ export interface NotificationFeishuBotConfig {
   webhookUrl: string;
 }
 
+export interface LiveSummaryFeishuStreamerOverride {
+  streamer?: string;
+  roomId?: string;
+  documentId?: string;
+  folderToken?: string;
+}
+
+export interface LiveSummaryNotionStreamerOverride {
+  streamer?: string;
+  roomId?: string;
+  pageId?: string;
+}
+
 /**
  * 企业微信群机器人通知配置
  */
@@ -822,6 +835,7 @@ export interface AppConfig {
           documentId: string;
           folderToken?: string;
           titleTemplate?: string;
+          streamerOverrides?: LiveSummaryFeishuStreamerOverride[];
         };
         notion: {
           enabled: boolean;
@@ -829,6 +843,7 @@ export interface AppConfig {
           token: string;
           pageId: string;
           titleTemplate?: string;
+          streamerOverrides?: LiveSummaryNotionStreamerOverride[];
         };
       };
       /** @deprecated use exportTargets.feishu */
