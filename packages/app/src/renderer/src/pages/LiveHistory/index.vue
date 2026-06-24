@@ -347,8 +347,59 @@ const visibleTableColumns = computed(() => {
   return allColumns.filter((column) => visibleColumns.value.includes(column.key as string));
 });
 
+const renderTranscriptDownloadButton = (row: LiveRecord) => {
+  if (!row.ai_transcript_file) return null;
+  return h(
+    NButton,
+    {
+      size: "small",
+      text: true,
+      onClick: () => downloadTranscript(row.id),
+    },
+    { default: () => "下载转写" },
+  );
+};
+
 const renderSummaryCell = (row: LiveRecord) => {
   if (row.ai_summary_status === "completed" && row.ai_summary) {
+    const actions: VNode[] = [
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          type: "primary",
+          onClick: () => showSummary(row.ai_summary || ""),
+        },
+        { default: () => "查看" },
+      ),
+    ];
+    const transcriptButton = renderTranscriptDownloadButton(row);
+    if (transcriptButton) {
+      actions.push(transcriptButton);
+    }
+    actions.push(
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          loading: summaryExportingIds.value.includes(row.id),
+          onClick: () => exportSummary(row),
+        },
+        { default: () => "重新导出" },
+      ),
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          loading: summaryGeneratingIds.value.includes(row.id),
+          onClick: () => generateSummary(row),
+        },
+        { default: () => "重新生成" },
+      ),
+    );
     return h(
       "div",
       {
@@ -358,38 +409,7 @@ const renderSummaryCell = (row: LiveRecord) => {
           gap: "8px",
         },
       },
-      [
-        h(
-          NButton,
-          {
-            size: "small",
-            text: true,
-            type: "primary",
-            onClick: () => showSummary(row.ai_summary || ""),
-          },
-          { default: () => "查看" },
-        ),
-        h(
-          NButton,
-          {
-            size: "small",
-            text: true,
-            loading: summaryExportingIds.value.includes(row.id),
-            onClick: () => exportSummary(row),
-          },
-          { default: () => "重新导出" },
-        ),
-        h(
-          NButton,
-          {
-            size: "small",
-            text: true,
-            loading: summaryGeneratingIds.value.includes(row.id),
-            onClick: () => generateSummary(row),
-          },
-          { default: () => "重新生成" },
-        ),
-      ],
+      actions,
     );
   }
   if (row.ai_summary_status === "running" || row.ai_summary_status === "pending") {
@@ -426,6 +446,10 @@ const renderSummaryCell = (row: LiveRecord) => {
           { default: () => "重新导出" },
         ),
       );
+    }
+    const transcriptButton = renderTranscriptDownloadButton(row);
+    if (transcriptButton) {
+      actions.push(transcriptButton);
     }
     actions.push(
       h(
@@ -604,6 +628,22 @@ const openFile = async (id: number) => {
 const downloadFile = async (id: number) => {
   try {
     const fileUrl = await recordHistoryApi.downloadFile(id);
+
+    const a = document.createElement("a");
+    a.href = fileUrl;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (error: any) {
+    notice.error({
+      title: error.message || error,
+    });
+  }
+};
+
+const downloadTranscript = async (id: number) => {
+  try {
+    const fileUrl = await recordHistoryApi.downloadTranscript(id);
 
     const a = document.createElement("a");
     a.href = fileUrl;
