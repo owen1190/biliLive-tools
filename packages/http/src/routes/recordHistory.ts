@@ -196,6 +196,21 @@ const createDanmaFileResponse = async (videoFile: string) => {
   };
 };
 
+const createTranscriptFileResponse = async (id: number) => {
+  const record = recordHistory.getRecordById(id);
+  const transcriptFile = record?.ai_transcript_file;
+  let transcriptFileId: string | null = null;
+
+  if (transcriptFile && (await fs.pathExists(transcriptFile))) {
+    transcriptFileId = fileCache.setFile(transcriptFile);
+  }
+
+  return {
+    transcriptFilePath: transcriptFileId ? transcriptFile : null,
+    transcriptFileId,
+  };
+};
+
 /**
  * 获取历史记录文件信息
  * @route GET /record-history/file/:id
@@ -217,10 +232,12 @@ router.get("/file/:id", async (ctx) => {
   }
   const videoInfo = await createVideoFileResponse(videoFile);
   const danmaInfo = await createDanmaFileResponse(videoFile);
+  const transcriptInfo = await createTranscriptFileResponse(parseInt(id));
 
   ctx.body = {
     ...videoInfo,
     ...danmaInfo,
+    ...transcriptInfo,
   };
 });
 
