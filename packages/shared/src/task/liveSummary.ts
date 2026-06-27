@@ -29,6 +29,7 @@ import {
 export interface LiveSummaryTaskOptions {
   recordId: number;
   videoFile: string;
+  summaryMode?: "record" | "session";
   title?: string;
   streamer?: string;
   roomId?: string;
@@ -230,11 +231,12 @@ export class LiveSummaryTask extends AbstractTask {
   constructor(options: LiveSummaryTaskOptions) {
     super();
     this.options = options;
-    this.name = `直播总结: ${path.basename(options.videoFile)}`;
+    this.name = `${options.summaryMode === "session" ? "整场直播总结" : "直播总结"}: ${path.basename(options.videoFile)}`;
     this.action = ["kill"];
     this.extra = {
       recordId: options.recordId,
       videoFile: options.videoFile,
+      summaryMode: options.summaryMode || "record",
     };
   }
 
@@ -312,10 +314,13 @@ export class LiveSummaryTask extends AbstractTask {
       title: targetRecord.title,
       video_file: this.options.videoFile || targetRecord.video_file,
     };
-    const sessionCandidates = targetRecord.live_id
+    const shouldSummarizeSession = this.options.summaryMode === "session";
+    const sessionCandidates = shouldSummarizeSession && targetRecord.live_id
       ? recordHistoryService.listSameLiveRecords(targetRecord)
       : [];
-    const sessionClips = resolveLiveSummarySessionClips(targetClip, sessionCandidates);
+    const sessionClips = shouldSummarizeSession
+      ? resolveLiveSummarySessionClips(targetClip, sessionCandidates)
+      : [targetClip];
     if (!sessionClips.length) {
       throw new Error("视频文件不存在");
     }
@@ -328,6 +333,7 @@ export class LiveSummaryTask extends AbstractTask {
       streamer: this.options.streamer,
       liveId: targetRecord.live_id,
       sessionClipCount: sessionClips.length,
+      summaryMode: this.options.summaryMode || "record",
     });
 
     this.custsomProgressMsg = "正在准备场次视频";
@@ -398,8 +404,9 @@ export class LiveSummaryTask extends AbstractTask {
 
       let transcriptFile: string | undefined;
       if (summaryConfig.saveTranscript) {
-        const transcriptSuffix =
-          sessionClips.length > 1 ? ".session.transcript.txt" : ".transcript.txt";
+        const transcriptSuffix = shouldSummarizeSession
+          ? ".session.transcript.txt"
+          : ".transcript.txt";
         transcriptFile = path.join(
           path.dirname(this.options.videoFile),
           `${path.basename(this.options.videoFile, path.extname(this.options.videoFile))}${transcriptSuffix}`,
@@ -410,6 +417,7 @@ export class LiveSummaryTask extends AbstractTask {
           transcriptFile,
           transcriptLength: transcript.length,
           sessionClipCount: sessionClips.length,
+          summaryMode: this.options.summaryMode || "record",
         });
       }
 
@@ -547,6 +555,7 @@ export function addLiveSummaryTask(
     taskId: task.taskId,
     recordId: options.recordId,
     videoFile: options.videoFile,
+    summaryMode: options.summaryMode || "record",
   });
   return task;
 }

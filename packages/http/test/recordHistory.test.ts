@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockPathExists, mockStat, mockSetFile, mockGetRecordById } = vi.hoisted(() => ({
+const {
+  mockPathExists,
+  mockStat,
+  mockSetFile,
+  mockGetRecordById,
+  mockQueryRecord,
+  mockAddLiveSummaryTask,
+} = vi.hoisted(() => ({
   mockPathExists: vi.fn(),
   mockStat: vi.fn(),
   mockSetFile: vi.fn((filePath: string) =>
     filePath.endsWith(".transcript.txt") ? "transcript-file-id" : "video-file-id",
   ),
   mockGetRecordById: vi.fn(),
+  mockQueryRecord: vi.fn(),
+  mockAddLiveSummaryTask: vi.fn(),
 }));
 
 vi.mock("@koa/router", () => {
@@ -49,12 +58,12 @@ vi.mock("@biliLive-tools/shared/recorder/recordHistory.js", () => ({
 
 vi.mock("@biliLive-tools/shared/db/index.js", () => ({
   recordHistoryService: {
-    query: vi.fn(),
+    query: mockQueryRecord,
   },
 }));
 
 vi.mock("@biliLive-tools/shared/task/liveSummary.js", () => ({
-  addLiveSummaryTask: vi.fn(),
+  addLiveSummaryTask: mockAddLiveSummaryTask,
   exportExistingLiveSummary: vi.fn(),
 }));
 
@@ -76,6 +85,7 @@ const getHandler = (routePath: string, method: "GET" | "POST" | "DELETE") => {
 describe("record history routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAddLiveSummaryTask.mockReturnValue({ taskId: "task-1" });
   });
 
   it("文件信息包含已保存 ASR 转写文本的下载文件 id", async () => {
@@ -107,5 +117,75 @@ describe("record history routes", () => {
         transcriptFileId: "transcript-file-id",
       }),
     );
+  });
+
+  it("普通直播总结入口保持单条录制总结", async () => {
+    const videoFile = "/records/live.flv";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "completed",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({ id: 1, video_file: videoFile });
+    mockPathExists.mockResolvedValue(true);
+
+    const ctx: any = {
+      params: { id: "1" },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: 1,
+        videoFile,
+        summaryMode: "record",
+      }),
+      { force: true },
+    );
+    expect(ctx.body.message).toBe("已添加直播总结任务");
+  });
+
+  it("整场直播总结入口会请求按场次整合", async () => {
+    const videoFile = "/records/live.flv";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "completed",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({ id: 1, video_file: videoFile });
+    mockPathExists.mockResolvedValue(true);
+
+    const ctx: any = {
+      params: { id: "1" },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary/session", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: 1,
+        videoFile,
+        summaryMode: "session",
+      }),
+      { force: true },
+    );
+    expect(ctx.body.message).toBe("已添加整场直播总结任务");
   });
 });

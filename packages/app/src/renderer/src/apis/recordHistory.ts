@@ -129,6 +129,17 @@ export async function generateLiveSummary(id: number): Promise<{
   return res.data;
 }
 
+export async function generateLiveSessionSummary(id: number): Promise<{
+  code: number;
+  data: {
+    taskId?: string;
+  };
+  message: string;
+}> {
+  const res = await request.post(`/record-history/${id}/live-summary/session`);
+  return res.data;
+}
+
 export async function exportLiveSummary(id: number): Promise<{
   code: number;
   message: string;
@@ -162,5 +173,6 @@ export default {
   getFileInfo,
   getDanmaFileInfo,
   generateLiveSummary,
+  generateLiveSessionSummary,
   exportLiveSummary,
 };

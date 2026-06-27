@@ -241,7 +241,13 @@ router.get("/file/:id", async (ctx) => {
   };
 });
 
-router.post("/:id/live-summary", async (ctx) => {
+const addLiveSummaryRouteTask = async (
+  ctx: any,
+  options: {
+    summaryMode: "record" | "session";
+    successMessage: string;
+  },
+) => {
   const { id } = ctx.params;
   const recordId = parseInt(id);
 
@@ -292,6 +298,7 @@ router.post("/:id/live-summary", async (ctx) => {
     {
       recordId,
       videoFile,
+      summaryMode: options.summaryMode,
       title: record.title,
       streamer: record.streamer?.name,
       roomId: record.streamer?.room_id,
@@ -308,8 +315,22 @@ router.post("/:id/live-summary", async (ctx) => {
     data: {
       taskId: task?.taskId,
     },
-    message: "已添加直播总结任务",
+    message: options.successMessage,
   };
+};
+
+router.post("/:id/live-summary", async (ctx) => {
+  await addLiveSummaryRouteTask(ctx, {
+    summaryMode: "record",
+    successMessage: "已添加直播总结任务",
+  });
+});
+
+router.post("/:id/live-summary/session", async (ctx) => {
+  await addLiveSummaryRouteTask(ctx, {
+    summaryMode: "session",
+    successMessage: "已添加整场直播总结任务",
+  });
 });
 
 router.post("/:id/live-summary/export", async (ctx) => {

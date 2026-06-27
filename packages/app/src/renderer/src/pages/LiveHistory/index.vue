@@ -399,6 +399,17 @@ const renderSummaryCell = (row: LiveRecord) => {
         },
         { default: () => "重新生成" },
       ),
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          type: "info",
+          loading: summaryGeneratingIds.value.includes(row.id),
+          onClick: () => generateSummary(row, "session"),
+        },
+        { default: () => "整场重生成" },
+      ),
     );
     return h(
       "div",
@@ -463,6 +474,17 @@ const renderSummaryCell = (row: LiveRecord) => {
         },
         { default: () => (row.ai_summary ? "重新生成" : "重试") },
       ),
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          type: "info",
+          loading: summaryGeneratingIds.value.includes(row.id),
+          onClick: () => generateSummary(row, "session"),
+        },
+        { default: () => (row.ai_summary ? "整场重生成" : "整场重试") },
+      ),
     );
     return h(
       "div",
@@ -477,15 +499,38 @@ const renderSummaryCell = (row: LiveRecord) => {
     );
   }
   return h(
-    NButton,
+    "div",
     {
-      size: "small",
-      text: true,
-      type: "primary",
-      loading: summaryGeneratingIds.value.includes(row.id),
-      onClick: () => generateSummary(row),
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+      },
     },
-    { default: () => "生成" },
+    [
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          type: "primary",
+          loading: summaryGeneratingIds.value.includes(row.id),
+          onClick: () => generateSummary(row),
+        },
+        { default: () => "生成" },
+      ),
+      h(
+        NButton,
+        {
+          size: "small",
+          text: true,
+          type: "info",
+          loading: summaryGeneratingIds.value.includes(row.id),
+          onClick: () => generateSummary(row, "session"),
+        },
+        { default: () => "整场生成" },
+      ),
+    ],
   );
 };
 
@@ -494,16 +539,20 @@ const showSummary = (summary: string) => {
   summaryModalVisible.value = true;
 };
 
-const generateSummary = async (row: LiveRecord) => {
+const generateSummary = async (row: LiveRecord, mode: "record" | "session" = "record") => {
   if (summaryGeneratingIds.value.includes(row.id)) return;
 
   summaryGeneratingIds.value = [...summaryGeneratingIds.value, row.id];
   try {
-    await recordHistoryApi.generateLiveSummary(row.id);
+    if (mode === "session") {
+      await recordHistoryApi.generateLiveSessionSummary(row.id);
+    } else {
+      await recordHistoryApi.generateLiveSummary(row.id);
+    }
     row.ai_summary_status = "pending";
     row.ai_summary_error = "";
     notice.success({
-      title: "已添加直播总结任务",
+      title: mode === "session" ? "已添加整场直播总结任务" : "已添加直播总结任务",
       duration: 1500,
     });
   } catch (error: any) {
