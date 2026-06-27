@@ -30,6 +30,17 @@ export default class RecordHistoryService {
     return this.recordHistoryModel.list(options);
   }
 
+  listSameLiveRecords(record: Pick<LiveHistory, "streamer_id" | "live_id">): LiveHistory[] {
+    if (!record.live_id) return [];
+    return this.recordHistoryModel.findMany({
+      where: {
+        streamer_id: record.streamer_id,
+        live_id: record.live_id,
+      },
+      orderBy: "record_start_time ASC",
+    });
+  }
+
   /**
    * 分页查询记录历史，支持时间范围过滤和排序
    * @param options 查询参数
