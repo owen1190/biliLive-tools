@@ -21,6 +21,7 @@ import { AbstractTask, taskQueue } from "./core/index.js";
 import { exportExistingLiveSummaryWithDeps } from "./liveSummaryExport.js";
 import {
   buildSessionTranscript,
+  formatLiveSummaryTitle,
   resolveLiveSummarySessionClips,
   type LiveSummarySessionClip,
   type LiveSummarySessionTranscriptPart,
@@ -72,6 +73,11 @@ function truncateText(text: string, maxLength: number) {
 ...[中间内容因长度限制省略]...
 
 ${text.slice(-tailLength)}`;
+}
+
+function formatSummaryModeContent(summary: string, summaryMode: "record" | "session") {
+  if (summaryMode !== "session") return summary;
+  return summary.startsWith("【整场总结】") ? summary : `【整场总结】\n\n${summary}`;
 }
 
 function throwIfAborted(signal: AbortSignal) {
@@ -315,15 +321,19 @@ export class LiveSummaryTask extends AbstractTask {
       video_file: this.options.videoFile || targetRecord.video_file,
     };
     const shouldSummarizeSession = this.options.summaryMode === "session";
-    const sessionCandidates = shouldSummarizeSession && targetRecord.live_id
+    const sessionCandidates = targetRecord.live_id
       ? recordHistoryService.listSameLiveRecords(targetRecord)
       : [];
-    const sessionClips = shouldSummarizeSession
+    const sameLiveClips = targetRecord.live_id
       ? resolveLiveSummarySessionClips(targetClip, sessionCandidates)
+      : [targetClip];
+    const sessionClips = shouldSummarizeSession
+      ? sameLiveClips
       : [targetClip];
     if (!sessionClips.length) {
       throw new Error("视频文件不存在");
     }
+    const targetClipIndex = sameLiveClips.findIndex((clip) => clip.id === targetRecord.id);
 
     logger.info("开始执行直播总结任务", {
       taskId: this.taskId,
@@ -425,13 +435,20 @@ export class LiveSummaryTask extends AbstractTask {
       this.progress = 70;
       this.emitter.emit("task-progress", { taskId: this.taskId });
 
-      const summary = await createSummary({
+      const summaryMode = this.options.summaryMode || "record";
+      const summaryTitle = formatLiveSummaryTitle(this.options.title, {
+        mode: summaryMode,
+        clipIndex: targetClipIndex >= 0 ? targetClipIndex : undefined,
+        clipCount: sameLiveClips.length,
+      });
+      const rawSummary = await createSummary({
         transcript,
-        title: this.options.title,
+        title: summaryTitle,
         streamer: this.options.streamer,
         roomId: this.options.roomId,
         platform: this.options.platform,
       });
+      const summary = formatSummaryModeContent(rawSummary, summaryMode);
       throwIfAborted(this.controller.signal);
 
       const exportTargets = getEnabledSummaryExportTargetNames(summaryConfig);
@@ -442,7 +459,14 @@ export class LiveSummaryTask extends AbstractTask {
         this.emitter.emit("task-progress", { taskId: this.taskId });
 
         try {
-          exportResults = await exportSummaryToTargets(summary, this.options, summaryConfig);
+          exportResults = await exportSummaryToTargets(
+            summary,
+            {
+              ...this.options,
+              title: summaryTitle,
+            },
+            summaryConfig,
+          );
           logger.info("直播总结导出完成", {
             taskId: this.taskId,
             targets: exportTargets,

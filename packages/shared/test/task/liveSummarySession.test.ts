@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSessionTranscript,
+  formatLiveSummaryTitle,
   resolveLiveSummarySessionClips,
   type LiveSummarySessionClip,
 } from "../../src/task/liveSummarySession.js";
@@ -64,5 +65,29 @@ describe("live summary session helpers", () => {
     expect(transcript).toContain("片段 2/2");
     expect(transcript).toContain("part-2.flv");
     expect(transcript).toContain("[00:00:00-00:00:02] 下半场");
+  });
+
+  it("marks full-session summary titles", () => {
+    expect(formatLiveSummaryTitle("准备战斗", { mode: "session" })).toBe("准备战斗（整场）");
+  });
+
+  it("marks clip summary titles with the clip index when a live has multiple clips", () => {
+    expect(
+      formatLiveSummaryTitle("准备战斗", {
+        mode: "record",
+        clipIndex: 1,
+        clipCount: 2,
+      }),
+    ).toBe("准备战斗（片段 2/2）");
+  });
+
+  it("keeps single-clip summary titles unchanged", () => {
+    expect(
+      formatLiveSummaryTitle("准备战斗", {
+        mode: "record",
+        clipIndex: 0,
+        clipCount: 1,
+      }),
+    ).toBe("准备战斗");
   });
 });

@@ -12,6 +12,12 @@ export interface LiveSummarySessionTranscriptPart {
   transcript: string;
 }
 
+export interface LiveSummaryTitleOptions {
+  mode: "record" | "session";
+  clipIndex?: number;
+  clipCount?: number;
+}
+
 function hasVideoFile(clip: LiveSummarySessionClip): clip is LiveSummarySessionClip & {
   video_file: string;
 } {
@@ -59,4 +65,23 @@ export function buildSessionTranscript(parts: LiveSummarySessionTranscriptPart[]
       return `${header}\n${part.transcript.trim()}`;
     })
     .join("\n\n");
+}
+
+export function formatLiveSummaryTitle(
+  title: string | undefined,
+  options: LiveSummaryTitleOptions,
+) {
+  if (!title) return title;
+  if (options.mode === "session") {
+    return title.includes("整场") ? title : `${title}（整场）`;
+  }
+  if (
+    typeof options.clipIndex !== "number" ||
+    typeof options.clipCount !== "number" ||
+    options.clipCount <= 1
+  ) {
+    return title;
+  }
+  const label = `片段 ${options.clipIndex + 1}/${options.clipCount}`;
+  return title.includes(label) ? title : `${title}（${label}）`;
 }
