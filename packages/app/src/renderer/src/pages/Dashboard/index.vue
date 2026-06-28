@@ -1,253 +1,155 @@
 <template>
-  <div class="dashboard-container">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1 class="page-title">数据看板</h1>
-      <n-button type="primary" @click="getTime" secondary>
-        <template #icon>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"
-            />
-          </svg>
-        </template>
-        刷新数据
-      </n-button>
-    </div>
-
-    <!-- 统计卡片区域 -->
-    <div class="stats-grid">
-      <n-card class="stat-card" hoverable>
-        <div class="stat-content">
-          <div class="stat-icon running-icon">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">软件运行时长</div>
-            <div class="stat-value">{{ formatTime(now - (statistics?.startTime || 0)) }}</div>
-          </div>
-        </div>
-      </n-card>
-
-      <n-card class="stat-card" hoverable>
-        <div class="stat-content">
-          <div class="stat-icon record-icon">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">最近30天录制时长</div>
-            <div class="stat-value">
-              {{ formatTime((statistics?.videoTotalDuaration || 0) * 1000) }}
-            </div>
-          </div>
-        </div>
-      </n-card>
-
-      <n-card class="stat-card clickable" hoverable @click="navigateToRecorder">
-        <div class="stat-content">
-          <div class="stat-icon streamer-icon">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">主播总数</div>
-            <div class="stat-value">{{ statistics?.recorderNum || 0 }}</div>
-          </div>
-        </div>
-      </n-card>
-
-      <n-card class="stat-card clickable" hoverable @click="navigateToRecorder">
-        <div class="stat-content">
-          <div class="stat-icon recording-icon">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">正在录制</div>
-            <div class="stat-value">{{ statistics?.recordingNum || 0 }}</div>
-          </div>
-        </div>
-      </n-card>
-
-      <n-card class="stat-card clickable" hoverable @click="navigateToQueue">
-        <div class="stat-content">
-          <div class="stat-icon task-icon">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <polyline points="10 9 9 9 8 9" />
-            </svg>
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">正在运行的任务</div>
-            <div class="stat-value">{{ runningTaskNum }}</div>
-          </div>
-        </div>
-      </n-card>
-
-      <n-card class="stat-card" hoverable v-if="diskSpace">
-        <div class="stat-content">
-          <div class="stat-icon disk-icon" :class="{ 'disk-icon-warning': diskSpace.free < 5 }">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <ellipse cx="12" cy="5" rx="9" ry="3" />
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-            </svg>
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">录制磁盘空间</div>
-            <div class="stat-value" :class="{ 'text-error': diskSpace.free < 5 }">
-              剩余 {{ diskSpace.free.toFixed(2) }}GB
-            </div>
-            <div class="stat-extra" :class="{ 'text-error': diskSpace.free < 5 }">
-              已用 {{ diskSpace.usedPercentage.toFixed(1) }}%
-            </div>
-          </div>
-        </div>
-      </n-card>
-    </div>
-
-    <!-- 操作按钮区域 -->
-    <n-card title="快捷操作" class="action-card">
-      <div class="action-buttons">
-        <n-button type="warning" @click="whyUploadFailed" size="large">
+  <div class="dashboard-shell">
+    <header class="dashboard-header">
+      <div>
+        <div class="eyebrow">整体概览</div>
+        <h1>从录制到归档的完整工作流</h1>
+        <p>监控直播录制、处理队列、上传诊断和 AI 摘要状态。</p>
+      </div>
+      <div class="header-actions">
+        <n-button quaternary class="soft-button" @click="getTime">
           <template #icon>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+            <n-icon><RefreshOutline /></n-icon>
           </template>
-          诊断上传问题
+          刷新
         </n-button>
-        <n-button type="error" @click="handleWebhook" size="large" style="display: none">
+        <n-button class="soft-button" @click="whyUploadFailed">
           <template #icon>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path
-                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-              />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
+            <n-icon><WarningOutline /></n-icon>
           </template>
-          修复Webhook卡住
+          上传诊断
+        </n-button>
+        <n-button type="primary" @click="navigateToRecorder">
+          <template #icon>
+            <n-icon><VideocamOutline /></n-icon>
+          </template>
+          新增录制
         </n-button>
       </div>
-    </n-card>
+    </header>
 
-    <!-- TODO: 图表区域 -->
-    <!-- <div class="charts-section">
-      <n-card title="录制时长趋势">
-        折线图
-      </n-card>
-    </div> -->
+    <section class="workflow-strip">
+      <div class="section-title">
+        <span>今日任务流</span>
+        <small>自动更新运行时长和任务数量</small>
+      </div>
+      <div class="workflow-steps">
+        <button
+          v-for="(step, index) in workflowSteps"
+          :key="step.label"
+          class="workflow-step"
+          type="button"
+          @click="step.action"
+        >
+          <span class="step-label">{{ step.label }}</span>
+          <strong :style="{ color: step.color }">{{ step.value }}</strong>
+          <i v-if="index < workflowSteps.length - 1"></i>
+        </button>
+      </div>
+    </section>
+
+    <div class="overview-grid">
+      <section class="surface today-panel">
+        <div class="section-title">
+          <span>今日直播</span>
+          <small>录制状态与存储健康</small>
+        </div>
+        <div class="live-list">
+          <button
+            v-for="item in todayLives"
+            :key="item.name"
+            class="live-row"
+            type="button"
+            @click="item.action"
+          >
+            <span class="live-avatar" :style="{ background: item.tint }">
+              <n-icon><component :is="item.icon" /></n-icon>
+            </span>
+            <span class="live-main">
+              <strong>{{ item.name }}</strong>
+              <small>{{ item.meta }}</small>
+            </span>
+            <span class="status-pill" :class="item.tone">{{ item.status }}</span>
+          </button>
+        </div>
+      </section>
+
+      <aside class="surface quick-panel">
+        <div class="section-title">
+          <span>快捷设置</span>
+          <small>常用能力开关</small>
+        </div>
+        <div class="quick-list">
+          <button class="quick-row" type="button" @click="navigateToRecorder">
+            <span>默认输出目录</span>
+            <b>已配置</b>
+          </button>
+          <button class="quick-row" type="button" @click="navigateToRecorder">
+            <span>自动录制</span>
+            <b class="enabled">开启</b>
+          </button>
+          <button class="quick-row" type="button" @click="openAiSetting">
+            <span>完成后 AI 摘要</span>
+            <b class="enabled">开启</b>
+          </button>
+          <button class="quick-row" type="button" @click="openWebhookSetting">
+            <span>Webhook 通知</span>
+            <b>按规则</b>
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <section class="surface queue-panel">
+      <div class="section-title">
+        <span>处理队列</span>
+        <small>{{ runningTaskNum }} 个任务正在运行</small>
+      </div>
+      <div class="queue-list">
+        <button
+          v-for="task in queuePreview"
+          :key="task.name"
+          class="queue-row"
+          type="button"
+          @click="navigateToQueue"
+        >
+          <span class="queue-name">{{ task.name }}</span>
+          <span class="progress-track">
+            <span class="progress-bar" :style="{ width: `${task.progress}%`, background: task.color }"></span>
+          </span>
+          <span class="queue-value">{{ task.value }}</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="surface recent-panel">
+      <div class="section-title">
+        <span>最近记录</span>
+        <small>转写下载与摘要状态</small>
+      </div>
+      <div class="recent-table">
+        <div class="recent-row recent-head">
+          <span>主播</span>
+          <span>标题</span>
+          <span>转写</span>
+          <span>摘要</span>
+        </div>
+        <button
+          v-for="record in recentRecords"
+          :key="record.title"
+          class="recent-row"
+          type="button"
+          @click="navigateToLiveHistory"
+        >
+          <span>{{ record.streamer }}</span>
+          <span>{{ record.title }}</span>
+          <span class="link-like">{{ record.transcript }}</span>
+          <span :class="record.summaryClass">{{ record.summary }}</span>
+        </button>
+      </div>
+    </section>
   </div>
 
-  <!-- 输入直播间号弹框 -->
   <n-modal v-model:show="roomIdModalVisible" :mask-closable="false" auto-focus>
     <n-card style="width: 500px" :bordered="false" role="dialog" aria-modal="true">
       <template #header>
@@ -270,7 +172,6 @@
     </n-card>
   </n-modal>
 
-  <!-- 结果显示弹框 -->
   <n-modal v-model:show="resultModalVisible" :mask-closable="false" auto-focus>
     <n-card style="width: 600px" :bordered="false" role="dialog" aria-modal="true">
       <template #header>
@@ -298,9 +199,18 @@
 
 <script setup lang="ts">
 import { commonApi } from "@renderer/apis";
-import { useConfirm } from "@renderer/hooks";
-import { useRouter } from "vue-router";
+import eventBus from "@renderer/utils/eventBus";
 import { useQueueStore } from "@renderer/stores";
+import { useRouter } from "vue-router";
+import {
+  ArchiveOutline,
+  FolderOpenOutline,
+  RefreshOutline,
+  VideocamOutline,
+  WarningOutline,
+} from "@vicons/ionicons5";
+
+import type { Component } from "vue";
 
 defineOptions({
   name: "Dashboard",
@@ -349,28 +259,160 @@ const formatTime = (time: number) => {
   const days = Math.floor(time / 1000 / 60 / 60 / 24);
 
   if (days > 0) {
-    return `${days}天${hours}小时${minutes}分钟${seconds}秒`;
-  } else {
-    return `${hours}小时${minutes}分钟${seconds}秒`;
+    return `${days}天${hours}小时${minutes}分钟`;
   }
+  return `${hours}小时${minutes}分钟${seconds}秒`;
 };
+
+const runtimeText = computed(() => formatTime(now.value - (statistics.value.startTime || now.value)));
+const diskStatus = computed(() => {
+  if (!diskSpace.value) {
+    return {
+      text: "未获取磁盘信息",
+      tone: "neutral",
+    };
+  }
+  if (diskSpace.value.free < 5) {
+    return {
+      text: `剩余 ${diskSpace.value.free.toFixed(2)}GB`,
+      tone: "warning",
+    };
+  }
+  return {
+    text: `剩余 ${diskSpace.value.free.toFixed(2)}GB · 已用 ${diskSpace.value.usedPercentage.toFixed(1)}%`,
+    tone: "success",
+  };
+});
+
+const workflowSteps = computed(() => [
+  {
+    label: "录制中",
+    value: statistics.value.recordingNum || 0,
+    color: "#18a058",
+    action: navigateToRecorder,
+  },
+  {
+    label: "转码中",
+    value: runningTaskNum.value,
+    color: "#2f80ed",
+    action: navigateToQueue,
+  },
+  {
+    label: "上传中",
+    value: runningTaskNum.value > 0 ? 1 : 0,
+    color: "#7c5cff",
+    action: navigateToQueue,
+  },
+  {
+    label: "AI摘要",
+    value: "就绪",
+    color: "#8b5cf6",
+    action: openAiSetting,
+  },
+  {
+    label: "已归档",
+    value: statistics.value.recorderNum || 0,
+    color: "#6b7280",
+    action: navigateToLiveHistory,
+  },
+]);
+
+const todayLives = computed<
+  {
+    name: string;
+    meta: string;
+    status: string;
+    tone: string;
+    tint: string;
+    icon: Component;
+    action: () => void;
+  }[]
+>(() => [
+  {
+    name: "正在录制",
+    meta: `${statistics.value.recordingNum || 0} 个直播间 · 运行 ${runtimeText.value}`,
+    status: statistics.value.recordingNum > 0 ? "录制中" : "待机",
+    tone: statistics.value.recordingNum > 0 ? "success" : "neutral",
+    tint: "#e0f4e9",
+    icon: VideocamOutline,
+    action: navigateToRecorder,
+  },
+  {
+    name: "主播库",
+    meta: `${statistics.value.recorderNum || 0} 位主播 · 规则持续同步`,
+    status: "可管理",
+    tone: "success",
+    tint: "#e5effb",
+    icon: FolderOpenOutline,
+    action: navigateToRecorder,
+  },
+  {
+    name: "录制磁盘",
+    meta: diskStatus.value.text,
+    status: diskStatus.value.tone === "warning" ? "需关注" : "健康",
+    tone: diskStatus.value.tone,
+    tint: "#f2eafe",
+    icon: ArchiveOutline,
+    action: getTime,
+  },
+]);
+
+const queuePreview = computed(() => [
+  {
+    name: "运行任务",
+    progress: Math.min(100, Math.max(12, runningTaskNum.value * 18)),
+    value: `${runningTaskNum.value} 个`,
+    color: "#2f80ed",
+  },
+  {
+    name: "最近30天录制",
+    progress: Math.min(100, Math.max(20, (statistics.value.videoTotalDuaration || 0) / 3600)),
+    value: formatTime((statistics.value.videoTotalDuaration || 0) * 1000),
+    color: "#7c5cff",
+  },
+  {
+    name: "摘要与归档",
+    progress: statistics.value.recorderNum ? 74 : 28,
+    value: statistics.value.recorderNum ? "已就绪" : "待配置",
+    color: "#8b5cf6",
+  },
+]);
+
+const recentRecords = [
+  {
+    streamer: "最近直播",
+    title: "直播录制完成后会在这里快速归档",
+    transcript: "下载转写",
+    summary: "生成摘要",
+    summaryClass: "link-like",
+  },
+  {
+    streamer: "任务队列",
+    title: "转码、上传、AI 摘要统一跟踪",
+    transcript: "转写中",
+    summary: "等待",
+    summaryClass: "muted",
+  },
+  {
+    streamer: "历史文件",
+    title: "打开最近记录查看完整明细",
+    transcript: "打开目录",
+    summary: "已归档",
+    summaryClass: "success-text",
+  },
+];
 
 let intervalId: NodeJS.Timeout | null = null;
 const createInterval = () => {
   if (intervalId) return;
-  const interval = window.isWeb ? 1000 : 1000;
   intervalId = setInterval(() => {
     now.value = Date.now();
-  }, interval);
+  }, 1000);
 };
 function cleanInterval() {
   intervalId && clearInterval(intervalId);
   intervalId = null;
 }
-
-onDeactivated(() => {
-  cleanInterval();
-});
 
 let eventSource: EventSource | null = null;
 async function getRunningTaskNum() {
@@ -397,27 +439,8 @@ onDeactivated(() => {
   }
 });
 
-const confirm = useConfirm();
 const notice = useNotice();
-const handleWebhook = async () => {
-  const res = await commonApi.testWebhook();
-  if (res.length === 0) {
-    notice.warning("没有发现问题");
-    return false;
-  }
-  const list = res.map((item) => `${item.file}`).join("\n");
 
-  const [status] = await confirm.warning({
-    title: "以下数据存在问题，是否处理，以下数据将会被认为是错误数据，请手动处理？",
-    content: `${list}`,
-  });
-  if (!status) return false;
-  await commonApi.handleWebhook(res);
-  notice.success("处理成功");
-  return true;
-};
-
-// 直播间号输入相关
 const roomIdModalVisible = ref(false);
 const roomIdInput = ref("");
 const resultModalVisible = ref(false);
@@ -452,152 +475,340 @@ const navigateToRecorder = () => {
 const navigateToQueue = () => {
   router.push({ name: "Queue" });
 };
+
+const navigateToLiveHistory = () => {
+  router.push({ name: "LiveHistory" });
+};
+
+const openAiSetting = () => {
+  eventBus.emit("open-setting-dialog", { extra: undefined });
+};
+
+const openWebhookSetting = () => {
+  eventBus.emit("open-setting-dialog", { extra: undefined });
+};
 </script>
 
 <style scoped lang="less">
-.dashboard-container {
-  padding: 24px;
-  // max-width: 1800px;
-  margin: 0 auto;
+.dashboard-shell {
+  min-height: 100%;
+  padding: 30px 40px 44px;
+  background: #f8f7f3;
+  color: #171512;
+  box-sizing: border-box;
 }
 
-.page-header {
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 34px;
+
+  h1 {
+    margin: 6px 0 8px;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  p {
+    margin: 0;
+    color: #766f67;
+    font-size: 14px;
+  }
+}
+
+.eyebrow {
+  color: #18a058;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.soft-button {
+  background: #ffffff;
+}
+
+.workflow-strip,
+.surface {
+  border: 1px solid #e7e2da;
+  border-radius: 10px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.workflow-strip {
+  padding: 22px 24px 24px;
+  margin-bottom: 28px;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+  margin-bottom: 20px;
+
+  span {
+    color: #171512;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  small {
+    color: #8a8178;
+    font-size: 12px;
+  }
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workflow-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid #ece7df;
+  border-radius: 8px;
+  background: #fafaf8;
+  color: #514b45;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+
+  &:hover {
+    border-color: #cfc7bb;
+    transform: translateY(-1px);
+  }
+
+  strong {
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  i {
+    position: absolute;
+    right: -18px;
+    width: 18px;
+    height: 2px;
+    background: #ddd7ce;
+  }
+}
+
+.step-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 28px;
+  margin-bottom: 28px;
+}
+
+.surface {
+  padding: 22px 24px;
+}
+
+.live-list,
+.quick-list,
+.queue-list,
+.recent-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.live-row,
+.quick-row,
+.queue-row,
+.recent-row {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.live-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 58px;
+  padding: 9px 0;
+  border-top: 1px solid #f0ece5;
+  cursor: pointer;
+
+  &:first-child {
+    border-top: 0;
+  }
+}
+
+.live-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  color: #171512;
+  font-size: 19px;
+}
+
+.live-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  strong {
+    color: #1f1c18;
+    font-size: 15px;
+  }
+
+  small {
+    margin-top: 4px;
+    overflow: hidden;
+    color: #827a72;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f0ece5;
+  color: #625b54;
+  font-size: 12px;
+  font-weight: 700;
+
+  &.success {
+    background: #eaf7ef;
+    color: #147c47;
+  }
+
+  &.warning {
+    background: #fff4d6;
+    color: #a56600;
+  }
+}
+
+.quick-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  min-height: 42px;
+  border-top: 1px solid #f0ece5;
+  cursor: pointer;
 
-  .page-title {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--text-primary);
+  &:first-child {
+    border-top: 0;
+  }
+
+  span {
+    color: #514b45;
+  }
+
+  b {
+    color: #766f67;
+    font-size: 13px;
+
+    &.enabled {
+      color: #18a058;
+    }
   }
 }
 
-.stats-grid {
+.queue-panel,
+.recent-panel {
+  margin-bottom: 28px;
+}
+
+.queue-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
+  grid-template-columns: 280px minmax(160px, 1fr) 120px;
+  gap: 24px;
+  align-items: center;
+  min-height: 38px;
+  cursor: pointer;
 }
 
-.stat-card {
-  transition: all 0.3s ease;
+.queue-name {
+  color: #1f1c18;
+  font-weight: 600;
+}
 
-  &.clickable {
-    cursor: pointer;
+.progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #efeae2;
+}
 
-    &:hover {
-      transform: translateY(-6px);
-    }
-  }
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
 
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px var(--shadow-color);
-  }
+.queue-value {
+  color: #625b54;
+  font-size: 13px;
+  font-weight: 600;
+}
 
-  .stat-content {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
+.recent-row {
+  display: grid;
+  grid-template-columns: 170px minmax(260px, 1fr) 160px 160px;
+  gap: 24px;
+  align-items: center;
+  min-height: 40px;
+  border-top: 1px solid #f0ece5;
+  cursor: pointer;
 
-  .stat-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-
-    &.running-icon {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-
-    &.record-icon {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-    }
-
-    &.streamer-icon {
-      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      color: white;
-    }
-
-    &.recording-icon {
-      background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-      color: white;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    &.task-icon {
-      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-      color: white;
-    }
-
-    &.disk-icon {
-      background: linear-gradient(135deg, #ff9a56 0%, #ffeaa7 100%);
-      color: white;
-    }
-
-    &.disk-icon-warning {
-      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
-      animation: pulse 2s ease-in-out infinite;
-    }
-  }
-
-  .stat-info {
-    flex: 1;
-    min-width: 0;
-
-    .stat-label {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-    }
-
-    .stat-value {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--text-primary);
-      word-break: break-all;
-    }
-
-    .stat-extra {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    .text-error {
-      color: #ff6b6b !important;
-      font-weight: 700;
-    }
+  &.recent-head {
+    min-height: 30px;
+    border-top: 0;
+    color: #8a8178;
+    cursor: default;
+    font-size: 12px;
+    font-weight: 700;
   }
 }
 
-.action-card {
-  margin-bottom: 24px;
-
-  .action-buttons {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
+.link-like,
+.success-text {
+  color: #18a058;
+  font-weight: 700;
 }
 
-.charts-section {
-  margin-top: 24px;
+.muted {
+  color: #8a8178;
 }
 
 .result-status {
-  font-weight: 500;
-  font-size: 16px;
   margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 500;
 
   &.result-error {
     color: var(--color-error);
@@ -610,38 +821,42 @@ const navigateToQueue = () => {
 
 .result-info {
   margin-top: 12px;
-  white-space: pre-wrap;
-  line-height: 1.5;
   color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-@media (max-width: 768px) {
-  .dashboard-container {
-    padding: 16px;
+@media (max-width: 1100px) {
+  .dashboard-shell {
+    padding: 24px;
   }
 
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .stats-grid {
+  .dashboard-header,
+  .overview-grid {
     grid-template-columns: 1fr;
   }
 
-  .stat-card .stat-value {
-    font-size: 18px;
+  .dashboard-header {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .workflow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-step i {
+    display: none;
+  }
+
+  .queue-row,
+  .recent-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px 0;
   }
 }
 </style>

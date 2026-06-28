@@ -2,21 +2,29 @@
   <n-space vertical>
     <n-layout has-sider class="layout" position="absolute">
       <n-layout-sider
+        class="app-sidebar"
         bordered
         collapse-mode="width"
-        :collapsed-width="64"
-        :width="160"
+        :collapsed-width="72"
+        :width="196"
         :collapsed="collapsed"
         show-trigger
         @collapse="collapsed = true"
         @expand="collapsed = false"
       >
+        <div class="brand-lockup" :class="{ collapsed }">
+          <div class="brand-mark">b</div>
+          <div class="brand-copy">
+            <div class="brand-title">biliLive</div>
+            <div class="brand-subtitle">workflow hub</div>
+          </div>
+        </div>
         <n-menu
           v-model:value="activeKey"
           class="main-menu"
           :style="{ marginBottom: `${footerMenuOptions.length * 50}px` }"
           :collapsed="collapsed"
-          :collapsed-width="64"
+          :collapsed-width="72"
           :collapsed-icon-size="22"
           :options="menuOptions"
           default-expand-all
@@ -27,7 +35,7 @@
             v-model:value="activeKey"
             class="footer-menu"
             :collapsed="collapsed"
-            :collapsed-width="64"
+            :collapsed-width="72"
             :collapsed-icon-size="22"
             :options="footerMenuOptions"
             default-expand-all
@@ -75,6 +83,7 @@ import { NIcon } from "naive-ui";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import {
   BuildOutline as BuildIcon,
+  DocumentTextOutline as HistoryIcon,
   FolderOpenOutline as FolderIcon,
   HomeOutline as HomeIcon,
   InformationCircleOutline as InfoIcon,
@@ -104,6 +113,12 @@ const { userInfo } = storeToRefs(useUserInfoStore());
 const route = useRoute();
 const activeKey = ref("Home");
 activeKey.value = route.name as string;
+watch(
+  () => route.name,
+  (name) => {
+    activeKey.value = name as string;
+  },
+);
 const collapsed = useStorage("collapsed", false);
 
 appConfig.getAppConfig();
@@ -367,10 +382,24 @@ const menuOptions = computed<MenuOption[]>(() => {
               name: "Home",
             },
           },
-          { default: () => "压制" },
+          { default: () => "压制上传" },
         ),
       key: "Home",
       icon: renderIcon(HomeIcon),
+    },
+    {
+      label: () =>
+        h(
+          RouterLink,
+          {
+            to: {
+              name: "Dashboard",
+            },
+          },
+          { default: () => "整体概览" },
+        ),
+      key: "Dashboard",
+      icon: renderIcon(DashboardIcon),
     },
     {
       key: "recorder",
@@ -383,34 +412,8 @@ const menuOptions = computed<MenuOption[]>(() => {
             },
           },
           { default: () => "直播录制" },
-        ),
+      ),
       icon: renderIcon(LiveTvRound),
-    },
-    {
-      label: () =>
-        h(
-          RouterLink,
-          {
-            to: {
-              name: "Dashboard",
-            },
-          },
-          { default: () => "看板" },
-        ),
-      key: "Dashboard",
-      icon: renderIcon(DashboardIcon),
-    },
-    {
-      label: () => h("span", "视频处理"),
-      key: "videoProcessing",
-      icon: renderIcon(VideoClip20Regular),
-      children: videoProcessingSubMenus,
-    },
-    {
-      label: () => h("span", "工具"),
-      key: "tools",
-      icon: renderIcon(BuildIcon),
-      children: toolsSubMenus,
     },
     {
       label: () =>
@@ -425,6 +428,32 @@ const menuOptions = computed<MenuOption[]>(() => {
         ),
       key: "Queue",
       icon: renderQueueIcon(QueueIcon),
+    },
+    {
+      label: () =>
+        h(
+          RouterLink,
+          {
+            to: {
+              name: "LiveHistory",
+            },
+          },
+          { default: () => "最近记录" },
+        ),
+      key: "LiveHistory",
+      icon: renderIcon(HistoryIcon),
+    },
+    {
+      label: () => h("span", "视频处理"),
+      key: "videoProcessing",
+      icon: renderIcon(VideoClip20Regular),
+      children: videoProcessingSubMenus,
+    },
+    {
+      label: () => h("span", "工具"),
+      key: "tools",
+      icon: renderIcon(BuildIcon),
+      children: toolsSubMenus,
     },
     {
       label: () =>
@@ -521,27 +550,90 @@ initChanglog();
 @import "../../assets/css/styles.less";
 
 .main-container {
-  margin: 15px;
-  margin-right: 0px;
+  margin: 0;
+  background: var(--workspace-bg, #f8f7f3);
 
   & > .n-layout-scroll-container {
-    padding-right: 10px;
+    padding-right: 0;
   }
   &.videoCut {
     margin: 0px;
-    margin-left: 15px;
-    margin-right: 10px;
+    margin-left: 0;
+    margin-right: 0;
     & > .n-layout-scroll-container {
       padding-right: 0px;
     }
   }
 }
+.layout {
+  background: var(--workspace-bg, #f8f7f3);
+}
+.app-sidebar {
+  background: var(--sidebar-bg, #ffffff) !important;
+
+  .n-layout-sider-scroll-container {
+    display: flex;
+    flex-direction: column;
+  }
+}
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 92px;
+  padding: 24px 22px 14px;
+  box-sizing: border-box;
+
+  &.collapsed {
+    justify-content: center;
+    padding-inline: 0;
+
+    .brand-copy {
+      display: none;
+    }
+  }
+}
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #141414;
+  color: #ffffff;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1;
+}
+.brand-title {
+  color: #171512;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.brand-subtitle {
+  margin-top: 4px;
+  color: #8a8178;
+  font-size: 12px;
+  line-height: 1;
+}
 .main-menu {
   margin-bottom: 100px;
+
+  .n-menu-item-content {
+    margin-inline: 14px;
+    border-radius: 8px;
+  }
 }
 .footer-menu {
   position: relative;
   z-index: 10;
-  background: var(--bg-primary);
+  background: var(--sidebar-bg, #ffffff);
+
+  .n-menu-item-content {
+    margin-inline: 14px;
+    border-radius: 8px;
+  }
 }
 </style>
