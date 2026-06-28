@@ -34,6 +34,16 @@
 
     <!-- 结果展示 -->
     <div class="result-container" v-if="recordList.length > 0 || loading">
+      <div v-if="recordList.length > 0" class="session-action-bar">
+        <n-button
+          size="small"
+          type="info"
+          :loading="sessionSummaryGenerating"
+          @click="generateSessionSummary"
+        >
+          {{ sessionSummaryButtonText }}
+        </n-button>
+      </div>
       <n-spin :show="loading">
         <n-data-table :columns="visibleTableColumns" :data="recordList" :pagination="false" />
 
@@ -399,17 +409,6 @@ const renderSummaryCell = (row: LiveRecord) => {
         },
         { default: () => "重新生成" },
       ),
-      h(
-        NButton,
-        {
-          size: "small",
-          text: true,
-          type: "info",
-          loading: summaryGeneratingIds.value.includes(row.id),
-          onClick: () => generateSummary(row, "session"),
-        },
-        { default: () => "整场重生成" },
-      ),
     );
     return h(
       "div",
@@ -474,17 +473,6 @@ const renderSummaryCell = (row: LiveRecord) => {
         },
         { default: () => (row.ai_summary ? "重新生成" : "重试") },
       ),
-      h(
-        NButton,
-        {
-          size: "small",
-          text: true,
-          type: "info",
-          loading: summaryGeneratingIds.value.includes(row.id),
-          onClick: () => generateSummary(row, "session"),
-        },
-        { default: () => (row.ai_summary ? "整场重生成" : "整场重试") },
-      ),
     );
     return h(
       "div",
@@ -499,38 +487,15 @@ const renderSummaryCell = (row: LiveRecord) => {
     );
   }
   return h(
-    "div",
+    NButton,
     {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-      },
+      size: "small",
+      text: true,
+      type: "primary",
+      loading: summaryGeneratingIds.value.includes(row.id),
+      onClick: () => generateSummary(row),
     },
-    [
-      h(
-        NButton,
-        {
-          size: "small",
-          text: true,
-          type: "primary",
-          loading: summaryGeneratingIds.value.includes(row.id),
-          onClick: () => generateSummary(row),
-        },
-        { default: () => "生成" },
-      ),
-      h(
-        NButton,
-        {
-          size: "small",
-          text: true,
-          type: "info",
-          loading: summaryGeneratingIds.value.includes(row.id),
-          onClick: () => generateSummary(row, "session"),
-        },
-        { default: () => "整场生成" },
-      ),
-    ],
+    { default: () => "生成" },
   );
 };
 
@@ -562,6 +527,22 @@ const generateSummary = async (row: LiveRecord, mode: "record" | "session" = "re
   } finally {
     summaryGeneratingIds.value = summaryGeneratingIds.value.filter((id) => id !== row.id);
   }
+};
+
+const sessionSummaryRecord = computed(() => recordList.value[0]);
+const sessionSummaryGenerating = computed(() => {
+  const record = sessionSummaryRecord.value;
+  return record ? summaryGeneratingIds.value.includes(record.id) : false;
+});
+const sessionSummaryButtonText = computed(() => {
+  const hasSummary = recordList.value.some((row) => Boolean(row.ai_summary));
+  return hasSummary ? "整场重生成" : "整场生成";
+});
+
+const generateSessionSummary = async () => {
+  const record = sessionSummaryRecord.value;
+  if (!record) return;
+  await generateSummary(record, "session");
 };
 
 const exportSummary = async (row: LiveRecord) => {
@@ -762,6 +743,13 @@ const previewVideo = async (id: number) => {
 
 .result-container {
   margin-top: 20px;
+}
+
+.session-action-bar {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin-bottom: 4px;
 }
 
 .summary-content {
