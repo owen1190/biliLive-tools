@@ -38,7 +38,8 @@
         <n-button
           size="small"
           type="info"
-          :loading="sessionSummaryGenerating"
+          :loading="sessionSummaryGenerating || sessionSummaryQueued"
+          :disabled="sessionSummaryQueued"
           @click="generateSessionSummary"
         >
           {{ sessionSummaryButtonText }}
@@ -67,7 +68,7 @@
     <n-modal v-model:show="summaryModalVisible">
       <n-card
         style="width: 720px; max-width: 90vw; max-height: 80vh"
-        title="AI总结"
+        :title="summaryModalTitle"
         :bordered="false"
         role="dialog"
         aria-modal="true"
@@ -178,6 +179,8 @@ const summaryModalVisible = ref(false);
 const currentSummary = ref("");
 const summaryGeneratingIds = ref<number[]>([]);
 const summaryExportingIds = ref<number[]>([]);
+const sessionSummaryGenerating = ref(false);
+const sessionSummaryQueued = ref(false);
 
 // 列配置
 const columnConfig: ColumnConfig[] = [
@@ -357,6 +360,10 @@ const visibleTableColumns = computed(() => {
   return allColumns.filter((column) => visibleColumns.value.includes(column.key as string));
 });
 
+const summaryModalTitle = computed(() =>
+  currentSummary.value.startsWith("【整场总结】") ? "整场AI总结" : "AI总结",
+);
+
 const renderTranscriptDownloadButton = (row: LiveRecord) => {
   if (!row.ai_transcript_file) return null;
   return h(
@@ -530,19 +537,32 @@ const generateSummary = async (row: LiveRecord, mode: "record" | "session" = "re
 };
 
 const sessionSummaryRecord = computed(() => recordList.value[0]);
-const sessionSummaryGenerating = computed(() => {
-  const record = sessionSummaryRecord.value;
-  return record ? summaryGeneratingIds.value.includes(record.id) : false;
-});
 const sessionSummaryButtonText = computed(() => {
+  if (sessionSummaryGenerating.value) return "整场提交中";
+  if (sessionSummaryQueued.value) return "整场生成中";
   const hasSummary = recordList.value.some((row) => Boolean(row.ai_summary));
   return hasSummary ? "整场重生成" : "整场生成";
 });
 
 const generateSessionSummary = async () => {
   const record = sessionSummaryRecord.value;
-  if (!record) return;
-  await generateSummary(record, "session");
+  if (!record || sessionSummaryGenerating.value || sessionSummaryQueued.value) return;
+
+  sessionSummaryGenerating.value = true;
+  try {
+    await recordHistoryApi.generateLiveSessionSummary(record.id);
+    sessionSummaryQueued.value = true;
+    notice.success({
+      title: "已添加整场直播总结任务",
+      duration: 1500,
+    });
+  } catch (error: any) {
+    notice.error({
+      title: error?.message || error,
+    });
+  } finally {
+    sessionSummaryGenerating.value = false;
+  }
 };
 
 const exportSummary = async (row: LiveRecord) => {
@@ -606,6 +626,7 @@ const handleQuery = async (): Promise<void> => {
   try {
     const result = await recordHistoryApi.queryRecords(apiParams);
     recordList.value = result.data || [];
+    sessionSummaryQueued.value = false;
     pagination.total = result.pagination.total;
     pagination.page = result.pagination.page;
     pagination.pageSize = result.pagination.pageSize;
