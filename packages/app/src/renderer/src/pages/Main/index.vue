@@ -5,14 +5,14 @@
         class="app-sidebar"
         bordered
         collapse-mode="width"
-        :collapsed-width="72"
-        :width="196"
-        :collapsed="collapsed"
-        show-trigger
+        :collapsed-width="collapsedSidebarWidth"
+        :width="sidebarWidth"
+        :collapsed="sidebarCollapsed"
+        :show-trigger="!isNarrowViewport"
         @collapse="collapsed = true"
         @expand="collapsed = false"
       >
-        <div class="brand-lockup" :class="{ collapsed }">
+        <div class="brand-lockup" :class="{ collapsed: sidebarCollapsed }">
           <div class="brand-mark">b</div>
           <div class="brand-copy">
             <div class="brand-title">biliLive</div>
@@ -23,8 +23,8 @@
           v-model:value="activeKey"
           class="main-menu"
           :style="{ marginBottom: `${footerMenuOptions.length * 50}px` }"
-          :collapsed="collapsed"
-          :collapsed-width="72"
+          :collapsed="sidebarCollapsed"
+          :collapsed-width="collapsedSidebarWidth"
           :collapsed-icon-size="22"
           :options="menuOptions"
           default-expand-all
@@ -34,8 +34,8 @@
           <n-menu
             v-model:value="activeKey"
             class="footer-menu"
-            :collapsed="collapsed"
-            :collapsed-width="72"
+            :collapsed="sidebarCollapsed"
+            :collapsed-width="collapsedSidebarWidth"
             :collapsed-icon-size="22"
             :options="footerMenuOptions"
             default-expand-all
@@ -120,6 +120,12 @@ watch(
   },
 );
 const collapsed = useStorage("collapsed", false);
+const viewportWidth = ref(typeof window === "undefined" ? 1024 : window.innerWidth);
+const isCompactViewport = computed(() => viewportWidth.value <= 480);
+const isNarrowViewport = computed(() => viewportWidth.value <= 768);
+const collapsedSidebarWidth = computed(() => (isCompactViewport.value ? 60 : 72));
+const sidebarWidth = computed(() => (isNarrowViewport.value ? collapsedSidebarWidth.value : 196));
+const sidebarCollapsed = computed(() => isNarrowViewport.value || collapsed.value);
 
 appConfig.getAppConfig();
 quenuStore.init();
@@ -491,10 +497,20 @@ const menuOptions = computed<MenuOption[]>(() => {
 
 const settingVisible = ref(false);
 
+const updateViewportWidth = () => {
+  viewportWidth.value = window.innerWidth;
+};
+
 onMounted(() => {
+  updateViewportWidth();
+  window.addEventListener("resize", updateViewportWidth);
   eventBus.on("open-setting-dialog", ({ extra }) => {
     openSetting("webhook", extra);
   });
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateViewportWidth);
 });
 
 const settingDialogRef = ref<InstanceType<typeof AppSettingDialog> | null>(null);
@@ -634,6 +650,60 @@ initChanglog();
   .n-menu-item-content {
     margin-inline: 14px;
     border-radius: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-sidebar {
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+    flex: 0 0 72px;
+
+    .brand-copy,
+    .n-menu-item-content-header,
+    .n-submenu-children {
+      display: none !important;
+    }
+  }
+
+  .brand-lockup {
+    justify-content: center;
+    height: 74px;
+    padding-top: 18px;
+    padding-inline: 0;
+  }
+
+  .main-menu,
+  .footer-menu {
+    .n-menu-item-content {
+      margin-inline: 10px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .app-sidebar {
+    width: 60px;
+    min-width: 60px;
+    max-width: 60px;
+    flex-basis: 60px;
+  }
+
+  .brand-lockup {
+    height: 68px;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .main-menu,
+  .footer-menu {
+    .n-menu-item-content {
+      margin-inline: 8px;
+    }
   }
 }
 </style>

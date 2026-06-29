@@ -151,7 +151,7 @@
   </div>
 
   <n-modal v-model:show="roomIdModalVisible" :mask-closable="false" auto-focus>
-    <n-card style="width: 500px" :bordered="false" role="dialog" aria-modal="true">
+    <n-card style="width: 500px; max-width: 92vw" :bordered="false" role="dialog" aria-modal="true">
       <template #header>
         <div style="font-size: 16px; font-weight: bold">输入直播间号</div>
       </template>
@@ -173,7 +173,7 @@
   </n-modal>
 
   <n-modal v-model:show="resultModalVisible" :mask-closable="false" auto-focus>
-    <n-card style="width: 600px" :bordered="false" role="dialog" aria-modal="true">
+    <n-card style="width: 600px; max-width: 92vw" :bordered="false" role="dialog" aria-modal="true">
       <template #header>
         <div style="font-size: 16px; font-weight: bold">检测结果</div>
       </template>
@@ -496,6 +496,7 @@ const openWebhookSetting = () => {
   background: #f8f7f3;
   color: #171512;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .dashboard-header {
@@ -504,6 +505,10 @@ const openWebhookSetting = () => {
   gap: 24px;
   align-items: flex-start;
   margin-bottom: 34px;
+
+  > div:first-child {
+    min-width: 0;
+  }
 
   h1 {
     margin: 6px 0 8px;
@@ -530,10 +535,24 @@ const openWebhookSetting = () => {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+
+  :deep(.n-button) {
+    min-height: 38px;
+  }
 }
 
 .soft-button {
   background: #ffffff;
+  border: 1px solid #e7e2da;
+  color: #1f1c18;
+  --n-text-color: #1f1c18 !important;
+  --n-text-color-hover: #1f1c18 !important;
+  --n-text-color-pressed: #1f1c18 !important;
+  --n-text-color-focus: #1f1c18 !important;
+  --n-border: 1px solid #e7e2da !important;
+  --n-border-hover: 1px solid #cfc7bb !important;
+  --n-border-pressed: 1px solid #bdb4a8 !important;
+  --n-border-focus: 1px solid #cfc7bb !important;
 }
 
 .workflow-strip,
@@ -598,6 +617,7 @@ const openWebhookSetting = () => {
   strong {
     font-size: 24px;
     font-weight: 700;
+    white-space: nowrap;
   }
 
   i {
@@ -653,6 +673,7 @@ const openWebhookSetting = () => {
   padding: 9px 0;
   border-top: 1px solid #f0ece5;
   cursor: pointer;
+  min-width: 0;
 
   &:first-child {
     border-top: 0;
@@ -693,6 +714,7 @@ const openWebhookSetting = () => {
 .status-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 28px;
   padding: 0 12px;
   border-radius: 999px;
@@ -716,6 +738,7 @@ const openWebhookSetting = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   min-height: 42px;
   border-top: 1px solid #f0ece5;
   cursor: pointer;
@@ -726,9 +749,11 @@ const openWebhookSetting = () => {
 
   span {
     color: #514b45;
+    min-width: 0;
   }
 
   b {
+    flex: 0 0 auto;
     color: #766f67;
     font-size: 13px;
 
@@ -755,6 +780,7 @@ const openWebhookSetting = () => {
 .queue-name {
   color: #1f1c18;
   font-weight: 600;
+  min-width: 0;
 }
 
 .progress-track {
@@ -784,6 +810,7 @@ const openWebhookSetting = () => {
   min-height: 40px;
   border-top: 1px solid #f0ece5;
   cursor: pointer;
+  min-width: 0;
 
   &.recent-head {
     min-height: 30px;
@@ -857,6 +884,166 @@ const openWebhookSetting = () => {
     grid-template-columns: 1fr;
     gap: 8px;
     padding: 12px 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-shell {
+    padding: 16px 12px 26px;
+  }
+
+  .dashboard-header {
+    gap: 18px;
+    margin-bottom: 22px;
+
+    h1 {
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    p {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+    gap: 8px;
+
+    :deep(.n-button) {
+      width: 100%;
+      justify-content: center;
+      min-height: 42px;
+    }
+  }
+
+  .workflow-strip,
+  .surface {
+    border-radius: 8px;
+  }
+
+  .workflow-strip,
+  .surface {
+    padding: 16px 14px;
+  }
+
+  .section-title {
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 16px;
+
+    span {
+      font-size: 18px;
+    }
+  }
+
+  .workflow-steps {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .workflow-step {
+    min-height: 48px;
+    padding: 0 14px;
+
+    strong {
+      font-size: 22px;
+    }
+  }
+
+  .overview-grid,
+  .queue-panel,
+  .recent-panel {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .live-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 0;
+  }
+
+  .live-avatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .status-pill {
+    grid-column: 2;
+    justify-self: flex-start;
+    min-height: 24px;
+    margin-top: 6px;
+    padding: 0 10px;
+  }
+
+  .quick-row {
+    min-height: 46px;
+
+    span,
+    b {
+      line-height: 1.35;
+    }
+  }
+
+  .queue-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 14px;
+    min-height: 48px;
+  }
+
+  .progress-track {
+    grid-column: 1 / -1;
+  }
+
+  .queue-value {
+    text-align: right;
+  }
+
+  .recent-head {
+    display: none;
+  }
+
+  .recent-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    min-height: auto;
+    padding: 12px 0;
+
+    span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    span:nth-child(2) {
+      grid-column: 1 / -1;
+      color: #625b54;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-shell {
+    padding: 14px 10px 24px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 20px;
+  }
+
+  .workflow-strip,
+  .surface {
+    padding: 14px 12px;
+  }
+
+  .section-title span {
+    font-size: 17px;
   }
 }
 </style>
