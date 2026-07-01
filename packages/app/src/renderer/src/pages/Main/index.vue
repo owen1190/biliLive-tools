@@ -39,6 +39,7 @@
             :collapsed-icon-size="22"
             :options="footerMenuOptions"
             default-expand-all
+            @update:value="handleFooterMenuUpdate"
           />
         </n-layout-footer>
       </n-layout-sider>
@@ -249,6 +250,18 @@ const footerMenuOptions = computed<MenuOption[]>(() => {
   );
   return menus;
 });
+
+const handleFooterMenuUpdate = (key: string) => {
+  if (key === "setting") {
+    openSetting();
+  } else if (key === "log") {
+    logVisible.value = true;
+  } else if (key === "logout") {
+    window.localStorage.removeItem("api");
+    window.localStorage.setItem("key", "");
+    router.push({ name: "Login" });
+  }
+};
 
 const menuOptions = computed<MenuOption[]>(() => {
   const toolsSubMenus = [
@@ -568,6 +581,7 @@ initChanglog();
 .main-container {
   margin: 0;
   background: var(--workspace-bg, #f8f7f3);
+  color: var(--text-primary);
 
   & > .n-layout-scroll-container {
     padding-right: 0;
@@ -623,14 +637,14 @@ initChanglog();
   line-height: 1;
 }
 .brand-title {
-  color: #171512;
+  color: var(--sidebar-title, #171512);
   font-size: 20px;
   font-weight: 700;
   line-height: 1.1;
 }
 .brand-subtitle {
   margin-top: 4px;
-  color: #8a8178;
+  color: var(--sidebar-muted, #8a8178);
   font-size: 12px;
   line-height: 1;
 }

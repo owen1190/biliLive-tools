@@ -7,16 +7,26 @@
     class="setting-modal"
   >
     <n-card
-      style="width: calc(100% - 60px)"
       :bordered="false"
       size="huge"
       role="dialog"
       aria-modal="true"
-      class="card"
+      class="setting-card"
+      :style="settingCardStyle"
     >
-      <n-tabs v-model:value="selectTab" type="bar" animated placement="left" class="setting-tab">
+      <n-tabs
+        v-model:value="selectTab"
+        type="bar"
+        animated
+        :placement="settingTabPlacement"
+        class="setting-tab"
+      >
         <n-tab-pane name="common" tab="基本">
-          <n-form ref="formRef" label-placement="left" :label-width="160">
+          <n-form
+            ref="formRef"
+            :label-placement="settingFormLabelPlacement"
+            :label-width="160"
+          >
             <n-form-item>
               <template #label>
                 <Tip
@@ -294,7 +304,7 @@
           </n-form>
         </n-tab-pane>
         <n-tab-pane name="webhook" tab="Webhook">
-          <n-form label-placement="left" :label-width="135">
+          <n-form :label-placement="settingFormLabelPlacement" :label-width="135">
             <n-form-item>
               <template #label>
                 <Tip
@@ -856,6 +866,30 @@ defineExpose({
 });
 
 const checkUpdateVisible = ref(false);
+const viewportWidth = ref(typeof window === "undefined" ? 1024 : window.innerWidth);
+const isMobileSetting = computed(() => viewportWidth.value <= 640);
+const settingTabPlacement = computed(() => (isMobileSetting.value ? "top" : "left"));
+const settingFormLabelPlacement = computed(() => (isMobileSetting.value ? "top" : "left"));
+const settingCardStyle = computed(() => ({
+  width: isMobileSetting.value ? "calc(100vw - 24px)" : "min(1080px, calc(100vw - 60px))",
+  maxHeight: isMobileSetting.value ? "calc(100vh - 24px)" : "calc(100vh - 48px)",
+  backgroundColor: "var(--bg-primary)",
+  color: "var(--text-primary)",
+}));
+
+const updateViewportWidth = () => {
+  viewportWidth.value = window.innerWidth;
+};
+
+onMounted(() => {
+  updateViewportWidth();
+  window.addEventListener("resize", updateViewportWidth);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", updateViewportWidth);
+});
+
 // 检查更新
 const checkForUpdates = async () => {
   if (isWeb.value) {
@@ -879,6 +913,13 @@ const navigate = (tab: string) => {
     margin-left: 10px;
   }
 }
+.setting-card {
+  width: min(1080px, calc(100vw - 60px));
+  max-height: calc(100vh - 48px);
+  --n-color: var(--bg-primary);
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary);
+}
 .room-list {
   gap: 15px;
   flex-wrap: wrap;
@@ -894,14 +935,94 @@ const navigate = (tab: string) => {
     }
   }
 }
+.setting-modal {
+  color: var(--text-primary);
+}
+.setting-modal > :deep(.n-card) {
+  --n-color: var(--bg-primary);
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary);
+}
+.setting-modal > :deep(.n-card__content),
 .setting-modal > :deep(.n-card-content) {
   padding-bottom: 0 !important;
   padding-right: 0px !important;
 }
-.setting-tab > :deep(.n-tab-pane) {
+.setting-tab :deep(.n-tab-pane) {
   overflow: auto;
   height: calc(100vh - 170px);
   scrollbar-gutter: stable;
   padding-right: 6px;
+}
+
+@media (max-width: 640px) {
+  .setting-card {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    border-radius: 12px;
+  }
+
+  .setting-modal > :deep(.n-card-header) {
+    padding: 14px 16px 8px;
+  }
+
+  .setting-modal > :deep(.n-card__content),
+  .setting-modal > :deep(.n-card-content) {
+    padding: 12px 12px 0 !important;
+  }
+
+  .setting-modal > :deep(.n-card__footer),
+  .setting-modal > :deep(.n-card-footer) {
+    padding: 10px 12px 12px;
+  }
+
+  .setting-tab > :deep(.n-tabs-nav) {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .setting-tab > :deep(.n-tabs-nav::-webkit-scrollbar) {
+    display: none;
+  }
+
+  .setting-tab > :deep(.n-tabs-tab) {
+    flex: 0 0 auto;
+    padding-left: 10px;
+    padding-right: 10px;
+    white-space: nowrap;
+  }
+
+  .setting-tab :deep(.n-tab-pane) {
+    height: calc(100vh - 224px);
+    max-height: calc(100vh - 224px);
+    padding: 8px 4px 0 0;
+  }
+
+  .setting-tab :deep(.n-form-item) {
+    --n-label-height: auto;
+  }
+
+  .setting-tab :deep(.n-input),
+  .setting-tab :deep(.n-input-number),
+  .setting-tab :deep(.n-select),
+  .setting-tab :deep(.n-date-picker) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+
+    .btn {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    .btn + .btn {
+      margin-left: 0;
+    }
+  }
 }
 </style>
