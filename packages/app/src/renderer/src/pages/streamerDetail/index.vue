@@ -118,6 +118,7 @@
                 <div v-if="recentClips.length > 0" class="clip-card-grid">
                   <div v-for="clip in recentClips" :key="clip.id" class="clip-card">
                     <Artplayer
+                      class="clip-player"
                       style="height: 160px"
                       :option="{
                         url: commonApi.getVideo(clip.videoFileId),
@@ -547,11 +548,15 @@ onMounted(() => {
 .streamer-detail-page {
   padding: 0 20px 24px;
   min-height: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .overview-shell {
   display: grid;
   gap: 18px;
+  min-width: 0;
+  max-width: 100%;
 
   :deep(.n-tabs-nav) {
     position: sticky;
@@ -563,6 +568,8 @@ onMounted(() => {
 .hero-card,
 .stat-card,
 .tab-panel {
+  min-width: 0;
+  max-width: 100%;
   border-radius: 24px;
   border: 1px solid rgba(215, 223, 235, 0.6);
   box-shadow: 0 18px 40px rgba(57, 74, 103, 0.08);
@@ -586,6 +593,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 20px;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .profile-block {
@@ -671,6 +679,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(5, minmax(max-content, 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .stat-card-content {
@@ -769,9 +778,13 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .clip-card {
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   border: none;
   background: rgba(255, 255, 255, 0.92);
@@ -792,6 +805,22 @@ onMounted(() => {
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
     }
   }
+}
+
+.clip-player {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.clip-card :deep(.artplayer),
+.clip-card :deep(.artplayer-app),
+.clip-card :deep(video) {
+  width: 100% !important;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .clip-info {
@@ -915,9 +944,87 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
+  .streamer-detail-page {
+    padding: 0 10px 18px;
+  }
+
+  .overview-shell {
+    gap: 12px;
+  }
+
+  .hero-card,
+  .stat-card,
+  .tab-panel {
+    border-radius: 14px;
+  }
+
+  .hero-card,
+  .tab-panel {
+    :deep(.n-card__content) {
+      padding: 16px 12px;
+    }
+  }
+
+  .stat-card {
+    :deep(.n-card__content) {
+      padding: 16px;
+    }
+  }
+
+  .hero-main,
+  .profile-block,
+  .profile-heading {
+    flex-direction: column;
+  }
+
+  .profile-heading {
+    gap: 10px;
+
+    h1 {
+      font-size: 24px;
+    }
+  }
+
+  .profile-avatar {
+    width: 56px !important;
+    height: 56px !important;
+    font-size: 24px;
+  }
+
+  .profile-tags,
+  .hero-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .hero-actions :deep(.n-button) {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+
   .clip-card-grid,
   .stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .clip-player {
+    height: 148px !important;
+  }
+
+  .clip-info {
+    padding: 10px 12px 12px;
+  }
+
+  .clip-meta-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .session-table-wrap {
+    margin-inline: -12px;
+    padding-inline: 12px;
+    -webkit-overflow-scrolling: touch;
   }
 }
 </style>
