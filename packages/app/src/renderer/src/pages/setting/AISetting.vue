@@ -234,6 +234,34 @@
                 <n-form-item>
                   <template #label>
                     <Tip
+                      tip="可为特定主播或房间号覆盖默认总结提示词。优先匹配房间号；未命中时匹配只填写主播名的规则。"
+                      text="按主播覆盖提示词"
+                    />
+                  </template>
+                  <n-dynamic-input
+                    v-model:value="config.ai.liveSummary.promptOverrides"
+                    :on-create="createLiveSummaryPromptOverride"
+                  >
+                    <template #default="{ value }">
+                      <div class="prompt-override-row">
+                        <n-input v-model:value="value.streamer" placeholder="主播名" />
+                        <n-input v-model:value="value.roomId" placeholder="房间号（优先）" />
+                        <n-input
+                          v-model:value="value.prompt"
+                          type="textarea"
+                          placeholder="该主播/房间使用的总结提示词"
+                          :autosize="{
+                            minRows: 2,
+                            maxRows: 6,
+                          }"
+                        />
+                      </div>
+                    </template>
+                  </n-dynamic-input>
+                </n-form-item>
+                <n-form-item>
+                  <template #label>
+                    <Tip
                       tip="限制送入LLM的转写文本长度，直播很长时会保留开头和结尾内容，避免上下文超限。"
                       text="最大输入长度"
                     />
@@ -580,6 +608,9 @@ type FeishuStreamerOverride = NonNullable<
 type NotionStreamerOverride = NonNullable<
   AppConfig["ai"]["liveSummary"]["exportTargets"]["notion"]["streamerOverrides"]
 >[number];
+type LiveSummaryPromptOverride = NonNullable<
+  AppConfig["ai"]["liveSummary"]["promptOverrides"]
+>[number];
 
 const config = defineModel<AppConfig>("data", {
   default: () => ({
@@ -591,6 +622,7 @@ const config = defineModel<AppConfig>("data", {
         asrModelId: undefined,
         llmModelId: undefined,
         prompt: "",
+        promptOverrides: [],
         maxInputLength: 24000,
         saveTranscript: true,
         exportTargets: {
@@ -622,9 +654,16 @@ const notice = useNotice();
 const confirm = useConfirm();
 
 watchEffect(() => {
+  config.value.ai.liveSummary.promptOverrides ||= [];
   const exportTargets = config.value.ai.liveSummary.exportTargets;
   exportTargets.feishu.streamerOverrides ||= [];
   exportTargets.notion.streamerOverrides ||= [];
+});
+
+const createLiveSummaryPromptOverride = (): LiveSummaryPromptOverride => ({
+  streamer: "",
+  roomId: "",
+  prompt: "",
 });
 
 const createFeishuStreamerOverride = (): FeishuStreamerOverride => ({
@@ -924,6 +963,27 @@ const tagOptions = [
   text-align: right;
   .btn + .btn {
     margin-left: 8px;
+  }
+}
+
+.prompt-override-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(120px, 160px) minmax(260px, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.streamer-override-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .prompt-override-row,
+  .streamer-override-row {
+    grid-template-columns: 1fr;
   }
 }
 

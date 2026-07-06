@@ -1,6 +1,7 @@
 import type { AppConfig } from "@biliLive-tools/types";
 
 import { extractFeishuDocumentId, extractFeishuFolderToken, FeishuDocClient } from "./feishu.js";
+import { findStreamerOverride } from "./liveSummaryConfig.js";
 import { extractNotionPageId, NotionClient } from "./notion.js";
 import logger from "../utils/log.js";
 
@@ -122,33 +123,6 @@ function getFeishuConfig(config: LiveSummaryConfig) {
   if (current?.enabled || current?.appId || current?.appSecret || current?.documentId)
     return current;
   return config.feishu;
-}
-
-function normalizeMatcherValue(value?: string) {
-  return value?.trim() || "";
-}
-
-function findStreamerOverride<T extends { streamer?: string; roomId?: string }>(
-  overrides: T[] | undefined,
-  input: SummaryExportContext,
-) {
-  const roomId = normalizeMatcherValue(input.roomId);
-  const streamer = normalizeMatcherValue(input.streamer);
-  if (!overrides?.length) return undefined;
-
-  if (roomId) {
-    const roomMatch = overrides.find(
-      (override) => normalizeMatcherValue(override.roomId) === roomId,
-    );
-    if (roomMatch) return roomMatch;
-  }
-
-  if (!streamer) return undefined;
-  return overrides.find(
-    (override) =>
-      !normalizeMatcherValue(override.roomId) &&
-      normalizeMatcherValue(override.streamer) === streamer,
-  );
 }
 
 function resolveFeishuConfig(config: FeishuExportConfig | undefined, input: SummaryExportContext) {

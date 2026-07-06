@@ -386,6 +386,12 @@ export interface LiveSummaryNotionStreamerOverride {
   pageId?: string;
 }
 
+export interface LiveSummaryPromptOverride {
+  streamer?: string;
+  roomId?: string;
+  prompt: string;
+}
+
 /**
  * 企业微信群机器人通知配置
  */
@@ -824,6 +830,7 @@ export interface AppConfig {
       asrModelId?: string;
       llmModelId?: string;
       prompt: string;
+      promptOverrides?: LiveSummaryPromptOverride[];
       maxInputLength: number;
       saveTranscript: boolean;
       exportTargets: {

@@ -402,6 +402,7 @@ export const APP_DEFAULT_CONFIG: AppConfig = {
 - 内容较少、闲聊较多或识别质量差时，也要明确说明可用信息有限。
 - Markdown 只使用标题、段落、无序列表和有序列表；不要使用表格、HTML、引用块、任务列表或复杂嵌套列表，以保证 Notion 和飞书导入稳定。
 - 输出中文。`,
+      promptOverrides: [],
       maxInputLength: 24000,
       saveTranscript: true,
       exportTargets: {

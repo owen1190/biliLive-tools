@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "fs-extra";
 
 import { createASRProvider, OpenAICompatibleLLM, type StandardASRResult } from "../ai/index.js";
+import { resolveLiveSummaryPrompt } from "../ai/liveSummaryConfig.js";
 import {
   buildLiveSummaryNotification,
   exportSummaryToTargets,
@@ -193,6 +194,7 @@ async function createSummary(input: {
   ]
     .filter(Boolean)
     .join("\n");
+  const summaryPrompt = resolveLiveSummaryPrompt(summaryConfig, input);
 
   logger.info("开始生成直播总结", {
     provider: vendor.provider,
@@ -204,6 +206,7 @@ async function createSummary(input: {
     platform: input.platform,
     transcriptLength: input.transcript.length,
     truncatedTranscriptLength: transcript.length,
+    promptOverrideMatched: summaryPrompt !== summaryConfig.prompt,
   });
   const response = await llm.sendMessage(
     `${meta}
@@ -211,7 +214,7 @@ async function createSummary(input: {
 以下是按时间排列的直播语音转写内容：
 
 ${transcript}`,
-    summaryConfig.prompt,
+    summaryPrompt,
     {
       temperature: 0.2,
       maxTokens: 3000,
@@ -327,9 +330,7 @@ export class LiveSummaryTask extends AbstractTask {
     const sameLiveClips = targetRecord.live_id
       ? resolveLiveSummarySessionClips(targetClip, sessionCandidates)
       : [targetClip];
-    const sessionClips = shouldSummarizeSession
-      ? sameLiveClips
-      : [targetClip];
+    const sessionClips = shouldSummarizeSession ? sameLiveClips : [targetClip];
     if (!sessionClips.length) {
       throw new Error("视频文件不存在");
     }
