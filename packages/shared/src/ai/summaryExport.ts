@@ -29,6 +29,16 @@ export type SummaryExportResult =
       mode: "append" | "create_child_page";
     };
 
+export class SummaryExportError extends Error {
+  constructor(
+    public errors: string[],
+    public results: SummaryExportResult[],
+  ) {
+    super(`总结已生成，但导出失败：${errors.join("；")}`);
+    this.name = "SummaryExportError";
+  }
+}
+
 type LiveSummaryConfig = AppConfig["ai"]["liveSummary"] & {
   feishu?: AppConfig["ai"]["liveSummary"]["exportTargets"]["feishu"];
 };
@@ -289,7 +299,7 @@ export async function exportSummaryToTargets(
   }
 
   if (errors.length) {
-    throw new Error(`总结已生成，但导出失败：${errors.join("；")}`);
+    throw new SummaryExportError(errors, results);
   }
   return results;
 }

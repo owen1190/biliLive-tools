@@ -240,6 +240,70 @@ describe("summary export helpers", () => {
     ]);
   });
 
+  it("keeps successful export links on partial target failure", async () => {
+    const { exportSummaryToTargets, SummaryExportError } = await import("../../src/ai/summaryExport.js");
+
+    axiosMocks.client.post.mockResolvedValueOnce({
+      data: {
+        code: 0,
+        tenant_access_token: "tenant-token",
+        expire: 7200,
+      },
+    });
+    axiosMocks.client.request.mockResolvedValue({
+      data: {
+        code: 0,
+        msg: "ok",
+      },
+    });
+
+    try {
+      await exportSummaryToTargets(
+        "总结内容",
+        { title: "直播标题" },
+        {
+          enabled: true,
+          prompt: "",
+          maxInputLength: 24000,
+          saveTranscript: true,
+          exportTargets: {
+            feishu: {
+              enabled: true,
+              mode: "append",
+              appId: "cli_xxx",
+              appSecret: "secret",
+              documentId: "doccnABC123",
+              folderToken: "",
+              titleTemplate: "",
+            },
+            notion: {
+              enabled: true,
+              mode: "append",
+              token: "secret_xxx",
+              pageId: "",
+              titleTemplate: "",
+            },
+          },
+        },
+      );
+      throw new Error("expected exportSummaryToTargets to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SummaryExportError);
+      expect(error).toMatchObject({
+        results: [
+          {
+            target: "feishu",
+            name: "飞书文档",
+            documentId: "doccnABC123",
+            url: "https://feishu.cn/docx/doccnABC123",
+            mode: "append",
+          },
+        ],
+      });
+      expect(error.message).toContain("Notion");
+    }
+  });
+
   it("uses room-specific export targets before global targets", async () => {
     const { exportSummaryToTargets } = await import("../../src/ai/summaryExport.js");
 

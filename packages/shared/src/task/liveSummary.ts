@@ -9,6 +9,7 @@ import {
   buildLiveSummaryNotification,
   exportSummaryToTargets,
   getEnabledSummaryExportTargetNames,
+  SummaryExportError,
   type SummaryExportResult,
 } from "../ai/summaryExport.js";
 import { appConfig } from "../config.js";
@@ -459,6 +460,7 @@ export class LiveSummaryTask extends AbstractTask {
 
       const exportTargets = getEnabledSummaryExportTargetNames(summaryConfig);
       let exportResults: SummaryExportResult[] = [];
+      let exportErrorMessage = "";
       if (exportTargets.length) {
         this.custsomProgressMsg = `正在导出总结到${exportTargets.join("、")}`;
         this.progress = 90;
@@ -479,16 +481,14 @@ export class LiveSummaryTask extends AbstractTask {
             links: exportResults.map((item) => item.url),
           });
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          recordHistoryService.update({
-            id: this.options.recordId,
-            ai_summary_status: "error",
-            ai_summary: summary,
-            ai_summary_error: errorMessage,
-            ...(transcriptFile ? { ai_transcript_file: transcriptFile } : {}),
-            ai_summary_time: Date.now(),
+          exportResults = error instanceof SummaryExportError ? error.results : [];
+          exportErrorMessage = error instanceof Error ? error.message : String(error);
+          logger.warn("直播总结部分导出失败，将继续发送已成功导出的通知", {
+            taskId: this.taskId,
+            recordId: this.options.recordId,
+            error: exportErrorMessage,
+            links: exportResults.map((item) => item.url),
           });
-          throw error;
         }
       }
 
@@ -507,6 +507,18 @@ export class LiveSummaryTask extends AbstractTask {
             recordId: this.options.recordId,
           });
         }
+      }
+
+      if (exportErrorMessage) {
+        recordHistoryService.update({
+          id: this.options.recordId,
+          ai_summary_status: "error",
+          ai_summary: summary,
+          ai_summary_error: exportErrorMessage,
+          ...(transcriptFile ? { ai_transcript_file: transcriptFile } : {}),
+          ai_summary_time: Date.now(),
+        });
+        throw new Error(exportErrorMessage);
       }
 
       recordHistoryService.update({
