@@ -250,6 +250,9 @@ const addLiveSummaryRouteTask = async (
 ) => {
   const { id } = ctx.params;
   const recordId = parseInt(id);
+  const requestBody = ctx.request?.body as { prompt?: unknown } | undefined;
+  const customPrompt =
+    typeof requestBody?.prompt === "string" ? requestBody.prompt.trim() : "";
 
   if (!id || isNaN(recordId)) {
     ctx.status = 400;
@@ -304,6 +307,7 @@ const addLiveSummaryRouteTask = async (
       roomId: record.streamer?.room_id,
       platform: record.streamer?.platform,
       recordStartTime: record.record_start_time,
+      ...(customPrompt ? { customPrompt } : {}),
     },
     {
       force: true,

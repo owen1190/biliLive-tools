@@ -3,6 +3,50 @@ import { describe, expect, it } from "vitest";
 import { resolveLiveSummaryPrompt } from "../../src/ai/liveSummaryConfig.js";
 
 describe("live summary config helpers", () => {
+  it("prefers a one-time custom prompt when provided", () => {
+    const prompt = resolveLiveSummaryPrompt(
+      {
+        prompt: "global prompt",
+        promptOverrides: [
+          {
+            streamer: "主播A",
+            roomId: "123",
+            prompt: "room prompt",
+          },
+        ],
+      } as any,
+      {
+        streamer: "主播A",
+        roomId: "123",
+      },
+      " custom prompt ",
+    );
+
+    expect(prompt).toBe("custom prompt");
+  });
+
+  it("ignores an empty one-time custom prompt", () => {
+    const prompt = resolveLiveSummaryPrompt(
+      {
+        prompt: "global prompt",
+        promptOverrides: [
+          {
+            streamer: "主播A",
+            roomId: "123",
+            prompt: "room prompt",
+          },
+        ],
+      } as any,
+      {
+        streamer: "主播A",
+        roomId: "123",
+      },
+      "   ",
+    );
+
+    expect(prompt).toBe("room prompt");
+  });
+
   it("prefers a room-specific prompt override", () => {
     const prompt = resolveLiveSummaryPrompt(
       {

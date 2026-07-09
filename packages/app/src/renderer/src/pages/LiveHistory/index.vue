@@ -76,6 +76,31 @@
         <div class="summary-content">{{ currentSummary }}</div>
       </n-card>
     </n-modal>
+
+    <n-modal v-model:show="promptModalVisible" :mask-closable="!promptModalSubmitting">
+      <n-card
+        style="width: 640px; max-width: 90vw"
+        :title="promptModalTitle"
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+      >
+        <n-input
+          v-model:value="promptModalText"
+          type="textarea"
+          :autosize="{ minRows: 5, maxRows: 10 }"
+          placeholder="输入本次提示词，留空使用默认配置"
+        />
+        <template #footer>
+          <div class="prompt-modal-actions">
+            <n-button :disabled="promptModalSubmitting" @click="closePromptModal">取消</n-button>
+            <n-button type="primary" :loading="promptModalSubmitting" @click="submitPromptModal">
+              开始生成
+            </n-button>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
   </div>
 </template>
 
@@ -181,6 +206,11 @@ const summaryGeneratingIds = ref<number[]>([]);
 const summaryExportingIds = ref<number[]>([]);
 const sessionSummaryGenerating = ref(false);
 const sessionSummaryQueued = ref(false);
+const promptModalVisible = ref(false);
+const promptModalText = ref("");
+const promptModalSubmitting = ref(false);
+const promptModalMode = ref<"record" | "session">("record");
+const promptModalRow = ref<LiveRecord | null>(null);
 
 // 列配置
 const columnConfig: ColumnConfig[] = [
@@ -363,6 +393,9 @@ const visibleTableColumns = computed(() => {
 const summaryModalTitle = computed(() =>
   currentSummary.value.startsWith("【整场总结】") ? "整场AI总结" : "AI总结",
 );
+const promptModalTitle = computed(() =>
+  promptModalMode.value === "session" ? "整场重生成" : "重新生成AI总结",
+);
 
 const renderTranscriptDownloadButton = (row: LiveRecord) => {
   if (!row.ai_transcript_file) return null;
@@ -412,7 +445,7 @@ const renderSummaryCell = (row: LiveRecord) => {
           size: "small",
           text: true,
           loading: summaryGeneratingIds.value.includes(row.id),
-          onClick: () => generateSummary(row),
+          onClick: () => openPromptModal(row),
         },
         { default: () => "重新生成" },
       ),
@@ -476,7 +509,7 @@ const renderSummaryCell = (row: LiveRecord) => {
           text: true,
           type: "warning",
           loading: summaryGeneratingIds.value.includes(row.id),
-          onClick: () => generateSummary(row),
+          onClick: () => (row.ai_summary ? openPromptModal(row) : generateSummary(row)),
         },
         { default: () => (row.ai_summary ? "重新生成" : "重试") },
       ),
@@ -511,42 +544,92 @@ const showSummary = (summary: string) => {
   summaryModalVisible.value = true;
 };
 
-const generateSummary = async (row: LiveRecord, mode: "record" | "session" = "record") => {
+const buildPromptOptions = (prompt?: string) => {
+  const value = prompt?.trim();
+  return value ? { prompt: value } : undefined;
+};
+
+const openPromptModal = (row: LiveRecord, mode: "record" | "session" = "record") => {
   if (summaryGeneratingIds.value.includes(row.id)) return;
+  promptModalRow.value = row;
+  promptModalMode.value = mode;
+  promptModalText.value = "";
+  promptModalVisible.value = true;
+};
+
+const closePromptModal = () => {
+  if (promptModalSubmitting.value) return;
+  promptModalVisible.value = false;
+  promptModalText.value = "";
+  promptModalRow.value = null;
+};
+
+const submitPromptModal = async () => {
+  const row = promptModalRow.value;
+  if (!row) return;
+  promptModalSubmitting.value = true;
+  try {
+    const submitted = await generateSummary(row, promptModalMode.value, promptModalText.value);
+    if (submitted) {
+      promptModalVisible.value = false;
+      promptModalText.value = "";
+      promptModalRow.value = null;
+    }
+  } finally {
+    promptModalSubmitting.value = false;
+  }
+};
+
+const generateSummary = async (
+  row: LiveRecord,
+  mode: "record" | "session" = "record",
+  customPrompt?: string,
+) => {
+  if (summaryGeneratingIds.value.includes(row.id)) return false;
 
   summaryGeneratingIds.value = [...summaryGeneratingIds.value, row.id];
   try {
+    const promptOptions = buildPromptOptions(customPrompt);
     if (mode === "session") {
-      await recordHistoryApi.generateLiveSessionSummary(row.id);
+      await recordHistoryApi.generateLiveSessionSummary(row.id, promptOptions);
     } else {
-      await recordHistoryApi.generateLiveSummary(row.id);
+      await recordHistoryApi.generateLiveSummary(row.id, promptOptions);
     }
     row.ai_summary_status = "pending";
     row.ai_summary_error = "";
+    if (mode === "session") {
+      sessionSummaryQueued.value = true;
+    }
     notice.success({
       title: mode === "session" ? "已添加整场直播总结任务" : "已添加直播总结任务",
       duration: 1500,
     });
+    return true;
   } catch (error: any) {
     notice.error({
       title: error?.message || error,
     });
+    return false;
   } finally {
     summaryGeneratingIds.value = summaryGeneratingIds.value.filter((id) => id !== row.id);
   }
 };
 
 const sessionSummaryRecord = computed(() => recordList.value[0]);
+const hasSessionSummary = computed(() => recordList.value.some((row) => Boolean(row.ai_summary)));
 const sessionSummaryButtonText = computed(() => {
   if (sessionSummaryGenerating.value) return "整场提交中";
   if (sessionSummaryQueued.value) return "整场生成中";
-  const hasSummary = recordList.value.some((row) => Boolean(row.ai_summary));
-  return hasSummary ? "整场重生成" : "整场生成";
+  return hasSessionSummary.value ? "整场重生成" : "整场生成";
 });
 
 const generateSessionSummary = async () => {
   const record = sessionSummaryRecord.value;
   if (!record || sessionSummaryGenerating.value || sessionSummaryQueued.value) return;
+  if (hasSessionSummary.value) {
+    openPromptModal(record, "session");
+    return;
+  }
 
   sessionSummaryGenerating.value = true;
   try {
@@ -778,5 +861,11 @@ const previewVideo = async (id: number) => {
   overflow: auto;
   white-space: pre-wrap;
   line-height: 1.7;
+}
+
+.prompt-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

@@ -32,6 +32,7 @@ export interface LiveSummaryTaskOptions {
   recordId: number;
   videoFile: string;
   summaryMode?: "record" | "session";
+  customPrompt?: string;
   title?: string;
   streamer?: string;
   roomId?: string;
@@ -163,6 +164,7 @@ async function createSummary(input: {
   streamer?: string;
   roomId?: string;
   platform?: string;
+  customPrompt?: string;
 }) {
   const config = appConfig.getAll();
   const summaryConfig = config.ai.liveSummary;
@@ -194,7 +196,8 @@ async function createSummary(input: {
   ]
     .filter(Boolean)
     .join("\n");
-  const summaryPrompt = resolveLiveSummaryPrompt(summaryConfig, input);
+  const customPrompt = input.customPrompt?.trim();
+  const summaryPrompt = resolveLiveSummaryPrompt(summaryConfig, input, customPrompt);
 
   logger.info("开始生成直播总结", {
     provider: vendor.provider,
@@ -206,7 +209,8 @@ async function createSummary(input: {
     platform: input.platform,
     transcriptLength: input.transcript.length,
     truncatedTranscriptLength: transcript.length,
-    promptOverrideMatched: summaryPrompt !== summaryConfig.prompt,
+    oneTimePromptUsed: !!customPrompt,
+    promptOverrideMatched: !customPrompt && summaryPrompt !== summaryConfig.prompt,
   });
   const response = await llm.sendMessage(
     `${meta}
@@ -448,6 +452,7 @@ export class LiveSummaryTask extends AbstractTask {
         streamer: this.options.streamer,
         roomId: this.options.roomId,
         platform: this.options.platform,
+        customPrompt: this.options.customPrompt,
       });
       const summary = formatSummaryModeContent(rawSummary, summaryMode);
       throwIfAborted(this.controller.signal);
@@ -581,6 +586,7 @@ export function addLiveSummaryTask(
     recordId: options.recordId,
     videoFile: options.videoFile,
     summaryMode: options.summaryMode || "record",
+    oneTimePromptUsed: !!options.customPrompt?.trim(),
   });
   return task;
 }

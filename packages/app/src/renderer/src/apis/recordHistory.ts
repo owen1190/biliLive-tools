@@ -118,25 +118,25 @@ export async function getDanmaFileInfo(videoFilePath: string): Promise<{
   return res.data;
 }
 
-export async function generateLiveSummary(id: number): Promise<{
+export async function generateLiveSummary(id: number, options?: { prompt?: string }): Promise<{
   code: number;
   data: {
     taskId?: string;
   };
   message: string;
 }> {
-  const res = await request.post(`/record-history/${id}/live-summary`);
+  const res = await request.post(`/record-history/${id}/live-summary`, options);
   return res.data;
 }
 
-export async function generateLiveSessionSummary(id: number): Promise<{
+export async function generateLiveSessionSummary(id: number, options?: { prompt?: string }): Promise<{
   code: number;
   data: {
     taskId?: string;
   };
   message: string;
 }> {
-  const res = await request.post(`/record-history/${id}/live-summary/session`);
+  const res = await request.post(`/record-history/${id}/live-summary/session`, options);
   return res.data;
 }
 

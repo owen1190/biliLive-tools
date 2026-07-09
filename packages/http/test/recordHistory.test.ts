@@ -154,6 +154,44 @@ describe("record history routes", () => {
     expect(ctx.body.message).toBe("已添加直播总结任务");
   });
 
+  it("普通直播总结入口会传递本次自定义提示词", async () => {
+    const videoFile = "/records/live.flv";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "completed",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({ id: 1, video_file: videoFile });
+    mockPathExists.mockResolvedValue(true);
+
+    const ctx: any = {
+      params: { id: "1" },
+      request: {
+        body: {
+          prompt: "  请重点总结带货节奏  ",
+        },
+      },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: 1,
+        customPrompt: "请重点总结带货节奏",
+      }),
+      { force: true },
+    );
+  });
+
   it("整场直播总结入口会请求按场次整合", async () => {
     const videoFile = "/records/live.flv";
     mockQueryRecord.mockReturnValue({
@@ -187,5 +225,42 @@ describe("record history routes", () => {
       { force: true },
     );
     expect(ctx.body.message).toBe("已添加整场直播总结任务");
+  });
+
+  it("整场直播总结入口会忽略空白自定义提示词", async () => {
+    const videoFile = "/records/live.flv";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "completed",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({ id: 1, video_file: videoFile });
+    mockPathExists.mockResolvedValue(true);
+
+    const ctx: any = {
+      params: { id: "1" },
+      request: {
+        body: {
+          prompt: "   ",
+        },
+      },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary/session", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        customPrompt: expect.any(String),
+      }),
+      { force: true },
+    );
   });
 });

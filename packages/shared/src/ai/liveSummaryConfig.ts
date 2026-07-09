@@ -42,7 +42,11 @@ export function findStreamerOverride<T extends StreamerOverride>(
 export function resolveLiveSummaryPrompt(
   config: AppConfig["ai"]["liveSummary"],
   input: SummaryOverrideContext,
+  customPrompt?: string,
 ) {
+  const oneTimePrompt = customPrompt?.trim();
+  if (oneTimePrompt) return oneTimePrompt;
+
   const override = findStreamerOverride(
     config.promptOverrides,
     input,
