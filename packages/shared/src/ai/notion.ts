@@ -106,6 +106,25 @@ export function extractNotionPageId(input: string) {
   return "";
 }
 
+function formatNotionResponseError(data: unknown, status?: number, fallback?: string) {
+  const parts: string[] = [];
+  if (status) parts.push(`HTTP ${status}`);
+  if (data && typeof data === "object") {
+    const response = data as { code?: unknown; msg?: unknown; message?: unknown };
+    if (response.code !== undefined) parts.push(`code ${response.code}`);
+    const message = typeof response.message === "string" && response.message
+      ? response.message
+      : typeof response.msg === "string" && response.msg
+        ? response.msg
+        : "";
+    if (message) parts.push(message);
+  } else if (typeof data === "string" && data) {
+    parts.push(data);
+  }
+  if (!parts.length && fallback) parts.push(fallback);
+  return parts.join("，") || "未知错误";
+}
+
 export function formatNotionError(error: unknown) {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
@@ -123,9 +142,17 @@ export function formatNotionError(error: unknown) {
       ? (error.response.data as { message?: unknown }).message
       : undefined;
     if (typeof message === "string" && message) return message;
+    return `Notion API 调用失败：${formatNotionResponseError(
+      error.response?.data,
+      status,
+      error.message,
+    )}`;
   }
 
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message || "Notion API 调用失败：未知错误";
+  }
+  return String(error) || "Notion API 调用失败：未知错误";
 }
 
 export function buildNotionChildPagePayload(parentPageId: string, title: string) {

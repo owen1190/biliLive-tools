@@ -56,6 +56,25 @@ describe("notion helpers", () => {
     );
   });
 
+  it("keeps Notion API status and code when response message is empty", () => {
+    const error = {
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          code: "validation_error",
+          message: "",
+        },
+      },
+    };
+
+    expect(formatNotionError(error)).toBe("Notion API 调用失败：HTTP 400，code validation_error");
+  });
+
+  it("uses a readable fallback when Notion throws an empty error", () => {
+    expect(formatNotionError(new Error())).toBe("Notion API 调用失败：未知错误");
+  });
+
   it("builds child page payload with parent page and title", () => {
     expect(buildNotionChildPagePayload("01234567-89ab-cdef-0123-456789abcdef", "主播 - 2026-06-09 13:30")).toEqual({
       parent: {
