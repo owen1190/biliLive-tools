@@ -7,6 +7,8 @@ import { taskQueue, DouyinDownloadVideoTask } from "../task/task.js";
 
 const DOUYIN_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const DOUYIN_MOBILE_USER_AGENT =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
 const douyinRequest = axios.create({
   timeout: 15000,
@@ -76,10 +78,54 @@ function getRedirectedUrl(response: any, fallback: string) {
   return response?.request?.res?.responseUrl || response?.request?.responseURL || fallback;
 }
 
+function normalizeDouyinUrl(input: string) {
+  const text = input.trim();
+  const match = text.match(/https?:\/\/[^\s]+/);
+  const rawUrl = (match?.[0] || text).replace(/[，。！？、]+$/u, "");
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.hostname === "v.douyin.com") {
+      const [shareCode] = parsed.pathname.split("/").filter(Boolean);
+      if (shareCode) return `${parsed.origin}/${shareCode}/`;
+    }
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function resolveUrl(location: string, baseUrl: string) {
+  try {
+    return new URL(location, baseUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+function extractShareUrl(url: string) {
+  const directMatch = url.match(
+    /(https?:\/\/(?:www\.)?iesdouyin\.com\/share\/(?:video|note)\/\d+\/?(?:\?[^"'<>\s]*)?)/,
+  );
+  if (directMatch?.[1]) return directMatch[1];
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith("iesdouyin.com") && /\/share\/(?:video|note)\/\d+/.test(parsed.pathname)) {
+      return parsed.toString();
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
 function extractAwemeId(url: string, html?: string) {
   const candidates = [
     /\/video\/(\d+)/,
     /\/note\/(\d+)/,
+    /\/share\/(?:video|note)\/(\d+)/,
     /[?&](?:modal_id|aweme_id|item_id)=(\d+)/,
   ];
   for (const pattern of candidates) {
@@ -112,6 +158,16 @@ function parseRenderData(html: string): any {
     } catch {
       return null;
     }
+  }
+}
+
+function parseRouterData(html: string): any {
+  const match = html.match(/window\._ROUTER_DATA\s*=\s*(\{.*?\})\s*;?\s*<\/script>/s);
+  if (!match?.[1]) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
   }
 }
 
@@ -215,15 +271,94 @@ function extractShortVideoInfoFromNode(
   };
 }
 
-export async function parseShortVideo(url: string): Promise<DouyinShortVideoInfo> {
-  const response = await douyinRequest.get(url);
-  const sourceUrl = getRedirectedUrl(response, url);
+async function resolveDouyinShareUrl(url: string) {
+  let currentUrl = normalizeDouyinUrl(url);
+  let shareUrl = extractShareUrl(currentUrl);
+
+  for (let i = 0; i < 4; i += 1) {
+    const currentAwemeId = extractAwemeId(shareUrl || currentUrl);
+    if (shareUrl && currentAwemeId) {
+      return {
+        sourceUrl: `https://www.douyin.com/video/${currentAwemeId}`,
+        shareUrl,
+        awemeId: currentAwemeId,
+      };
+    }
+
+    const response = await douyinRequest.get(currentUrl, {
+      maxRedirects: 0,
+      validateStatus: (status: number) => status >= 200 && status < 400,
+    });
+    const redirectedUrl = getRedirectedUrl(response, currentUrl);
+    const html = typeof response.data === "string" ? response.data : "";
+    const location = asString(response.headers?.location);
+    const nextUrl = location ? resolveUrl(location, currentUrl) : "";
+
+    shareUrl =
+      shareUrl ||
+      extractShareUrl(currentUrl) ||
+      extractShareUrl(redirectedUrl) ||
+      extractShareUrl(nextUrl);
+    const awemeId =
+      extractAwemeId(shareUrl || "") ||
+      extractAwemeId(redirectedUrl, html) ||
+      extractAwemeId(currentUrl, html) ||
+      extractAwemeId(nextUrl);
+
+    if (shareUrl && awemeId) {
+      return {
+        sourceUrl: `https://www.douyin.com/video/${awemeId}`,
+        shareUrl,
+        awemeId,
+      };
+    }
+
+    if (response.status >= 300 && nextUrl) {
+      currentUrl = nextUrl;
+      continue;
+    }
+
+    return {
+      sourceUrl: redirectedUrl,
+      shareUrl,
+      awemeId,
+      html,
+    };
+  }
+
+  return {
+    sourceUrl: currentUrl,
+    shareUrl,
+    awemeId: extractAwemeId(shareUrl || currentUrl),
+  };
+}
+
+async function parseMobileSharePage(shareUrl: string, awemeId: string, sourceUrl: string) {
+  const response = await douyinRequest.get(shareUrl, {
+    headers: {
+      "User-Agent": DOUYIN_MOBILE_USER_AGENT,
+      Referer: "https://www.iesdouyin.com/",
+    },
+  });
   const html = typeof response.data === "string" ? response.data : "";
-  const awemeId = extractAwemeId(sourceUrl, html);
+  const routerData = parseRouterData(html);
+  const awemeNode = findAwemeNode(routerData, awemeId);
+  return extractShortVideoInfoFromNode(awemeId, sourceUrl, awemeNode);
+}
+
+export async function parseShortVideo(url: string): Promise<DouyinShortVideoInfo> {
+  const resolved = await resolveDouyinShareUrl(url);
+  const sourceUrl = resolved.sourceUrl;
+  const awemeId = resolved.awemeId || extractAwemeId(sourceUrl, resolved.html);
   if (!awemeId) {
     throw new Error("无法从抖音链接解析出视频 ID");
   }
 
+  const shareUrl = resolved.shareUrl || `https://www.iesdouyin.com/share/video/${awemeId}/`;
+  const mobileInfo = await parseMobileSharePage(shareUrl, awemeId, sourceUrl).catch(() => null);
+  if (mobileInfo) return mobileInfo;
+
+  const html = resolved.html || "";
   const renderData = parseRenderData(html);
   const awemeNode = findAwemeNode(renderData, awemeId);
   const info = extractShortVideoInfoFromNode(awemeId, sourceUrl, awemeNode);
