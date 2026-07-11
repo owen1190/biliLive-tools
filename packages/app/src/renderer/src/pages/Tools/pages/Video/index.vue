@@ -31,6 +31,24 @@
         <n-button type="primary" :disabled="!url" @click="subscribe"> 订阅 </n-button>
       </div>
 
+      <div class="analysis-options">
+        <div class="analysis-option-row">
+          <span class="analysis-option-label">分析文档目录：</span>
+          <n-input
+            v-model:value="analysisOutputDir"
+            placeholder="留空则保存到临时目录"
+            :title="analysisOutputDir"
+          />
+          <n-button ghost @click="selectAnalysisOutputDir">选择目录</n-button>
+        </div>
+        <n-input
+          v-model:value="analysisPrompt"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 8 }"
+          placeholder="AI 分析提示词，留空则使用默认短视频分析提示词"
+        />
+      </div>
+
       <section v-if="analysisTask" class="analysis-panel">
         <div class="analysis-header">
           <div>
@@ -97,6 +115,14 @@
             >
               {{ result.name }}
             </a>
+          </div>
+
+          <div v-if="analysisOutput.documentFile" class="analysis-local-doc">
+            <span>本地文档：</span>
+            <span :title="analysisOutput.documentFile">{{ analysisOutput.documentFile }}</span>
+            <n-button v-if="!isWeb" size="tiny" ghost @click="openAnalysisDocumentFolder">
+              打开目录
+            </n-button>
           </div>
 
           <div class="analysis-summary">
@@ -221,6 +247,7 @@ import DownloadConfirm from "./components/DownloadModal.vue";
 import SubscribeModal from "./components/SubscribeModal.vue";
 import SubVideoList from "./components/SubVideoList.vue";
 import { sanitizeFileName } from "@renderer/utils";
+import { showDirectoryDialog } from "@renderer/utils/fileSystem";
 import { taskApi } from "@renderer/apis";
 import { videoApi } from "@renderer/apis";
 
@@ -414,9 +441,27 @@ const analysisSubmitting = ref(false);
 const analysisExporting = ref(false);
 const analysisDownloading = ref(false);
 const analysisTask = ref<Task | null>(null);
+const analysisOutputDir = ref("");
+const analysisPrompt = ref("");
 let analysisTimer: number | null = null;
+const ANALYSIS_OUTPUT_DIR_STORAGE_KEY = "douyin-video-analysis-output-dir";
+const ANALYSIS_PROMPT_STORAGE_KEY = "douyin-video-analysis-prompt";
+const isWeb = window.isWeb;
 
 const analysisOutput = computed(() => analysisTask.value?.output as AnalysisOutput | undefined);
+
+onMounted(() => {
+  analysisOutputDir.value = localStorage.getItem(ANALYSIS_OUTPUT_DIR_STORAGE_KEY) || "";
+  analysisPrompt.value = localStorage.getItem(ANALYSIS_PROMPT_STORAGE_KEY) || "";
+});
+
+watch(analysisOutputDir, (value) => {
+  localStorage.setItem(ANALYSIS_OUTPUT_DIR_STORAGE_KEY, value);
+});
+
+watch(analysisPrompt, (value) => {
+  localStorage.setItem(ANALYSIS_PROMPT_STORAGE_KEY, value);
+});
 
 const stopAnalysisPolling = () => {
   if (!analysisTimer) return;
@@ -452,7 +497,11 @@ const analyzeDouyinVideo = async () => {
 
   analysisSubmitting.value = true;
   try {
-    const res = await taskApi.analyzeDouyinVideo({ url: targetUrl });
+    const res = await taskApi.analyzeDouyinVideo({
+      url: targetUrl,
+      outputDir: analysisOutputDir.value.trim() || undefined,
+      prompt: analysisPrompt.value.trim() || undefined,
+    });
     await refreshAnalysisTask(res.taskId);
     startAnalysisPolling(res.taskId);
     notice.success({
@@ -462,6 +511,14 @@ const analyzeDouyinVideo = async () => {
   } finally {
     analysisSubmitting.value = false;
   }
+};
+
+const selectAnalysisOutputDir = async () => {
+  const dir = await showDirectoryDialog({
+    defaultPath: analysisOutputDir.value,
+  });
+  if (!dir) return;
+  analysisOutputDir.value = dir;
 };
 
 const exportAnalysis = async () => {
@@ -493,6 +550,12 @@ const downloadAnalysisDocument = async () => {
   } finally {
     analysisDownloading.value = false;
   }
+};
+
+const openAnalysisDocumentFolder = async () => {
+  const documentFile = analysisOutput.value?.documentFile;
+  if (!documentFile || window.isWeb) return;
+  await window.api.openPath(window.path.dirname(documentFile));
 };
 
 onUnmounted(() => {
@@ -530,6 +593,25 @@ const showHelpModal = ref(false);
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.analysis-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.analysis-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysis-option-label {
+  flex: none;
+  color: #555;
+  font-size: 13px;
 }
 
 .analysis-panel {
@@ -587,6 +669,21 @@ const showHelpModal = ref(false);
   }
 }
 
+.analysis-local-doc {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+  color: #555;
+  font-size: 12px;
+
+  span:nth-child(2) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .analysis-summary {
   margin-top: 12px;
 
@@ -602,6 +699,18 @@ const showHelpModal = ref(false);
   word-break: break-word;
   line-height: 1.6;
   font-family: inherit;
+}
+
+@media (max-width: 720px) {
+  .input,
+  .analysis-option-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-option-label {
+    align-self: flex-start;
+  }
 }
 
 .help-content {

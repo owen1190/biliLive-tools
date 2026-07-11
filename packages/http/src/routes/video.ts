@@ -59,6 +59,7 @@ router.post("/ai-analysis", async (ctx) => {
   const task = addDouyinVideoAnalysisTask({
     url,
     customPrompt: data.prompt,
+    outputDir: data.outputDir?.trim(),
   });
   ctx.body = {
     taskId: task.taskId,

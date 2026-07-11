@@ -1,6 +1,7 @@
 import type { AppConfig } from "@biliLive-tools/types";
 
 import type { SummaryExportContext, SummaryExportResult } from "../ai/summaryExport.js";
+import { formatLiveSummaryTitle } from "./liveSummarySession.js";
 
 type LiveSummaryConfig = AppConfig["ai"]["liveSummary"];
 
@@ -36,6 +37,10 @@ export interface LiveSummaryExportDeps {
   logSuccess?(data: { recordId: number; targets: string[] }): void;
 }
 
+function isSessionSummary(summary: string) {
+  return summary.trimStart().startsWith("【整场总结】");
+}
+
 export async function exportExistingLiveSummaryWithDeps(
   recordId: number,
   deps: LiveSummaryExportDeps,
@@ -55,7 +60,9 @@ export async function exportExistingLiveSummaryWithDeps(
   }
 
   const input: SummaryExportContext = {
-    title: record.title,
+    title: formatLiveSummaryTitle(record.title, {
+      mode: isSessionSummary(record.ai_summary) ? "session" : "record",
+    }),
     streamer: record.streamer?.name,
     roomId: record.streamer?.room_id,
     platform: record.streamer?.platform,

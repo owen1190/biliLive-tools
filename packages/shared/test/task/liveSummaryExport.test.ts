@@ -73,4 +73,54 @@ describe("exportExistingLiveSummaryWithDeps", () => {
     );
     expect(vi.mocked(deps.updateRecord).mock.calls[0][0].ai_summary_error).toContain("总结已生成，但导出失败");
   });
+
+  it("marks full-session summary title when re-exporting an existing session summary", async () => {
+    vi.mocked(deps.getRecord).mockReturnValue({
+      id: 38,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary: "【整场总结】\n\n已经生成的整场总结",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    vi.mocked(deps.exportSummary).mockResolvedValue([]);
+
+    await exportExistingLiveSummaryWithDeps(38, deps);
+
+    expect(deps.exportSummary).toHaveBeenCalledWith(
+      "【整场总结】\n\n已经生成的整场总结",
+      expect.objectContaining({
+        title: "直播标题（整场）",
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("does not duplicate full-session marker when the title already has it", async () => {
+    vi.mocked(deps.getRecord).mockReturnValue({
+      id: 38,
+      title: "直播标题（整场）",
+      record_start_time: 1781105107602,
+      ai_summary: "【整场总结】\n\n已经生成的整场总结",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    vi.mocked(deps.exportSummary).mockResolvedValue([]);
+
+    await exportExistingLiveSummaryWithDeps(38, deps);
+
+    expect(deps.exportSummary).toHaveBeenCalledWith(
+      "【整场总结】\n\n已经生成的整场总结",
+      expect.objectContaining({
+        title: "直播标题（整场）",
+      }),
+      expect.any(Object),
+    );
+  });
 });

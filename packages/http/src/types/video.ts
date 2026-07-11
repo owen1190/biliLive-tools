@@ -36,6 +36,7 @@ export type VideoAPI = {
     Args: {
       url: string;
       prompt?: string;
+      outputDir?: string;
     };
     Resp: {
       taskId: string;

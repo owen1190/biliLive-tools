@@ -24,6 +24,7 @@ import type { DouyinShortVideoInfo } from "../video/douyin.js";
 export interface DouyinVideoAnalysisTaskOptions {
   url: string;
   customPrompt?: string;
+  outputDir?: string;
 }
 
 export interface DouyinVideoAnalysisOutput {
@@ -300,6 +301,7 @@ export class DouyinVideoAnalysisTask extends AbstractTask {
       ...options,
       url: options.url.trim(),
       customPrompt: options.customPrompt?.trim(),
+      outputDir: options.outputDir?.trim(),
     };
     this.name = "抖音视频 AI 分析";
     this.action = ["kill"];
@@ -371,6 +373,7 @@ export class DouyinVideoAnalysisTask extends AbstractTask {
         awemeId: info.awemeId,
         title: info.title,
         sourceUrl: info.sourceUrl,
+        outputDir: this.options.outputDir,
       };
       this.throwIfAborted();
 
@@ -410,7 +413,8 @@ export class DouyinVideoAnalysisTask extends AbstractTask {
       this.custsomProgressMsg = "正在生成 Markdown 文档";
       this.progress = 90;
       this.emitter.emit("task-progress", { taskId: this.taskId });
-      const documentDir = path.join(getTempPath(), "douyin-video-analysis-docs");
+      const documentDir =
+        this.options.outputDir || path.join(getTempPath(), "douyin-video-analysis-docs");
       await fs.ensureDir(documentDir);
       const documentFile = path.join(
         documentDir,
