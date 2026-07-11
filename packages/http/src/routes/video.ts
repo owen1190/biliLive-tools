@@ -6,9 +6,16 @@ import huya from "@biliLive-tools/shared/video/huya.js";
 import kuaishou from "@biliLive-tools/shared/video/kuaishou.js";
 import douyin from "@biliLive-tools/shared/video/douyin.js";
 import biliApi from "@biliLive-tools/shared/task/bili.js";
+import {
+  addDouyinVideoAnalysisTask,
+  DouyinVideoAnalysisTask,
+  type DouyinVideoAnalysisOutput,
+} from "@biliLive-tools/shared/task/douyinVideoAnalysis.js";
+import { taskQueue } from "@biliLive-tools/shared/task/task.js";
 import log from "@biliLive-tools/shared/utils/log.js";
 import videoSub from "@biliLive-tools/shared/video/videoSub.js";
 import { replaceExtName } from "@biliLive-tools/shared/utils/index.js";
+import { appConfig, fileCache } from "../index.js";
 
 import type { VideoAPI } from "../types/video.js";
 
@@ -29,6 +36,71 @@ router.post("/download", async (ctx) => {
   let options = ctx.request.body;
 
   ctx.body = await downloadVideo(options);
+});
+
+router.post("/ai-analysis", async (ctx) => {
+  const data = ctx.request.body as VideoAPI["analyzeDouyinVideo"]["Args"];
+  const url = data.url?.trim();
+  if (!url) {
+    ctx.status = 400;
+    ctx.body = {
+      message: "url is required",
+    };
+    return;
+  }
+  if (!/https?:\/\/(v|www)\.douyin\.com\//.test(url)) {
+    ctx.status = 400;
+    ctx.body = {
+      message: "仅支持抖音视频链接",
+    };
+    return;
+  }
+
+  const task = addDouyinVideoAnalysisTask({
+    url,
+    customPrompt: data.prompt,
+  });
+  ctx.body = {
+    taskId: task.taskId,
+  };
+});
+
+function getDouyinAnalysisTask(taskId: string) {
+  const task = taskQueue.queryTask(taskId);
+  if (!task || !(task instanceof DouyinVideoAnalysisTask)) {
+    throw new Error("抖音视频 AI 分析任务不存在");
+  }
+  return task;
+}
+
+function getCompletedDouyinAnalysisOutput(task: DouyinVideoAnalysisTask) {
+  if (task.status !== "completed" || !task.output) {
+    throw new Error("请等待 AI 分析完成");
+  }
+  return task.output as unknown as DouyinVideoAnalysisOutput;
+}
+
+router.post("/ai-analysis/:taskId/export", async (ctx) => {
+  const task = getDouyinAnalysisTask(ctx.params.taskId);
+  const results = await task.exportToDocuments(appConfig.getAll().ai.liveSummary);
+  ctx.body = {
+    results,
+    output: task.output,
+  };
+});
+
+router.get("/ai-analysis/:taskId/document", async (ctx) => {
+  const task = getDouyinAnalysisTask(ctx.params.taskId);
+  const output = getCompletedDouyinAnalysisOutput(task);
+  if (!output.documentFile) {
+    throw new Error("文档文件不存在");
+  }
+
+  const fileId = fileCache.setFile(output.documentFile);
+  ctx.body = {
+    fileId,
+    url: `${ctx.origin}/assets/download/${fileId}`,
+  };
 });
 
 router.post("/sub/parse", async (ctx) => {

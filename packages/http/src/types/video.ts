@@ -1,4 +1,8 @@
 import videoSub from "@biliLive-tools/shared/video/videoSub.js";
+import type {
+  DouyinVideoAnalysisOutput,
+  DouyinVideoAnalysisTask,
+} from "@biliLive-tools/shared/task/douyinVideoAnalysis.js";
 
 type Platform = "douyu" | "bilibili" | "huya" | "bilibiliLive" | "kuaishou" | "douyinLive";
 
@@ -28,6 +32,34 @@ export type VideoAPI = {
       onlyDanmu?: boolean;
     };
   };
+  analyzeDouyinVideo: {
+    Args: {
+      url: string;
+      prompt?: string;
+    };
+    Resp: {
+      taskId: string;
+    };
+  };
+  exportDouyinVideoAnalysis: {
+    Args: {
+      taskId: string;
+    };
+    Resp: {
+      results: DouyinVideoAnalysisOutput["exportResults"];
+      output: DouyinVideoAnalysisOutput;
+    };
+  };
+  downloadDouyinVideoAnalysisDocument: {
+    Args: {
+      taskId: string;
+    };
+    Resp: {
+      fileId: string;
+      url: string;
+    };
+  };
+  DouyinVideoAnalysisTask: DouyinVideoAnalysisTask;
   SubList: {
     Args: {};
     Resp: ReturnType<(typeof videoSub)["list"]>;

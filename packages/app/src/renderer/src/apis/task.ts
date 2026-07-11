@@ -245,6 +245,27 @@ const downloadVideo = async (data: VideoAPI["downloadVideo"]["Args"]) => {
   return res.data;
 };
 
+const analyzeDouyinVideo = async (
+  data: VideoAPI["analyzeDouyinVideo"]["Args"],
+): Promise<VideoAPI["analyzeDouyinVideo"]["Resp"]> => {
+  const res = await request.post(`/video/ai-analysis`, data);
+  return res.data;
+};
+
+const exportDouyinVideoAnalysis = async (
+  taskId: string,
+): Promise<VideoAPI["exportDouyinVideoAnalysis"]["Resp"]> => {
+  const res = await request.post(`/video/ai-analysis/${taskId}/export`);
+  return res.data;
+};
+
+const downloadDouyinVideoAnalysisDocument = async (
+  taskId: string,
+): Promise<VideoAPI["downloadDouyinVideoAnalysisDocument"]["Resp"]> => {
+  const res = await request.get(`/video/ai-analysis/${taskId}/document`);
+  return res.data;
+};
+
 const addExtraVideoTask = async (taskId: string, filePath: string, partName: string) => {
   const res = await request.post(`/task/addExtraVideoTask`, { taskId, filePath, partName });
   return res.data;
@@ -366,6 +387,9 @@ const task = {
   readVideoMeta,
   parseVideo,
   downloadVideo,
+  analyzeDouyinVideo,
+  exportDouyinVideoAnalysis,
+  downloadDouyinVideoAnalysisDocument,
   cut,
   checkMergeVideos,
   addExtraVideoTask,

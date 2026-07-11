@@ -19,8 +19,98 @@
           @keyup.enter="download"
         />
         <n-button type="primary" ghost :disabled="!url" @click="download"> 下载 </n-button>
+        <n-button
+          type="info"
+          ghost
+          :disabled="!url || analysisSubmitting"
+          :loading="analysisSubmitting"
+          @click="analyzeDouyinVideo"
+        >
+          AI分析
+        </n-button>
         <n-button type="primary" :disabled="!url" @click="subscribe"> 订阅 </n-button>
       </div>
+
+      <section v-if="analysisTask" class="analysis-panel">
+        <div class="analysis-header">
+          <div>
+            <h3>{{ analysisOutput?.title || analysisTask.name || "抖音视频 AI 分析" }}</h3>
+            <p v-if="analysisOutput?.sourceUrl" class="analysis-source">
+              {{ analysisOutput.sourceUrl }}
+            </p>
+          </div>
+          <div class="analysis-actions">
+            <n-button
+              size="small"
+              type="primary"
+              ghost
+              :disabled="analysisTask.status !== 'completed'"
+              :loading="analysisExporting"
+              @click="exportAnalysis"
+            >
+              导出到文档
+            </n-button>
+            <n-button
+              size="small"
+              type="primary"
+              :disabled="analysisTask.status !== 'completed'"
+              :loading="analysisDownloading"
+              @click="downloadAnalysisDocument"
+            >
+              下载文档
+            </n-button>
+          </div>
+        </div>
+
+        <n-progress
+          v-if="['pending', 'running'].includes(analysisTask.status)"
+          type="line"
+          :percentage="analysisTask.progress"
+          :indicator-placement="'outside'"
+        />
+        <p v-if="analysisTask.custsomProgressMsg" class="analysis-progress-text">
+          {{ analysisTask.custsomProgressMsg }}
+        </p>
+
+        <n-alert v-if="analysisTask.status === 'error'" type="error" :bordered="false">
+          {{ analysisTask.error || "AI 分析失败" }}
+        </n-alert>
+
+        <template v-if="analysisOutput">
+          <n-alert
+            v-if="analysisOutput.exportError"
+            class="analysis-export-alert"
+            type="warning"
+            :bordered="false"
+          >
+            {{ analysisOutput.exportError }}
+          </n-alert>
+
+          <div v-if="analysisOutput.exportResults?.length" class="analysis-links">
+            <span>文档链接：</span>
+            <a
+              v-for="result in analysisOutput.exportResults"
+              :key="`${result.target}-${result.url}`"
+              :href="result.url"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ result.name }}
+            </a>
+          </div>
+
+          <div class="analysis-summary">
+            <h4>总结</h4>
+            <pre>{{ analysisOutput.summary }}</pre>
+          </div>
+
+          <n-collapse>
+            <n-collapse-item title="ASR 转写文本" name="transcript">
+              <pre class="analysis-transcript">{{ analysisOutput.transcript }}</pre>
+            </n-collapse-item>
+          </n-collapse>
+        </template>
+      </section>
 
       <SubVideoList
         :list="subVideoList"
@@ -134,7 +224,22 @@ import { sanitizeFileName } from "@renderer/utils";
 import { taskApi } from "@renderer/apis";
 import { videoApi } from "@renderer/apis";
 
+import type { Task } from "@renderer/types";
 import type { VideoAPI } from "@biliLive-tools/http/types/video.js";
+
+type AnalysisOutput = {
+  title: string;
+  sourceUrl: string;
+  summary: string;
+  transcript: string;
+  documentFile?: string;
+  exportError?: string;
+  exportResults?: Array<{
+    target: string;
+    name: string;
+    url: string;
+  }>;
+};
 
 const notice = useNotification();
 const url = ref("");
@@ -305,6 +410,94 @@ const confirm = async (options: {
 
 const visible = ref(false);
 const loading = ref(false);
+const analysisSubmitting = ref(false);
+const analysisExporting = ref(false);
+const analysisDownloading = ref(false);
+const analysisTask = ref<Task | null>(null);
+let analysisTimer: number | null = null;
+
+const analysisOutput = computed(() => analysisTask.value?.output as AnalysisOutput | undefined);
+
+const stopAnalysisPolling = () => {
+  if (!analysisTimer) return;
+  window.clearInterval(analysisTimer);
+  analysisTimer = null;
+};
+
+const refreshAnalysisTask = async (taskId: string) => {
+  const task = await taskApi.get(taskId);
+  analysisTask.value = task;
+  if (["completed", "error", "canceled"].includes(task.status)) {
+    stopAnalysisPolling();
+  }
+};
+
+const startAnalysisPolling = (taskId: string) => {
+  stopAnalysisPolling();
+  analysisTimer = window.setInterval(() => {
+    refreshAnalysisTask(taskId).catch((error) => {
+      stopAnalysisPolling();
+      notice.error({
+        title: "刷新 AI 分析状态失败",
+        content: error?.message || String(error),
+        duration: 3000,
+      });
+    });
+  }, 1500);
+};
+
+const analyzeDouyinVideo = async () => {
+  const targetUrl = url.value.trim();
+  if (!targetUrl) return;
+
+  analysisSubmitting.value = true;
+  try {
+    const res = await taskApi.analyzeDouyinVideo({ url: targetUrl });
+    await refreshAnalysisTask(res.taskId);
+    startAnalysisPolling(res.taskId);
+    notice.success({
+      title: "已开始 AI 分析",
+      duration: 2000,
+    });
+  } finally {
+    analysisSubmitting.value = false;
+  }
+};
+
+const exportAnalysis = async () => {
+  if (!analysisTask.value) return;
+
+  analysisExporting.value = true;
+  try {
+    const res = await taskApi.exportDouyinVideoAnalysis(analysisTask.value.taskId);
+    analysisTask.value = {
+      ...analysisTask.value,
+      output: res.output,
+    };
+    notice.success({
+      title: "已导出到文档",
+      duration: 2000,
+    });
+  } finally {
+    analysisExporting.value = false;
+  }
+};
+
+const downloadAnalysisDocument = async () => {
+  if (!analysisTask.value) return;
+
+  analysisDownloading.value = true;
+  try {
+    const res = await taskApi.downloadDouyinVideoAnalysisDocument(analysisTask.value.taskId);
+    window.open(res.url, "_blank");
+  } finally {
+    analysisDownloading.value = false;
+  }
+};
+
+onUnmounted(() => {
+  stopAnalysisPolling();
+});
 
 const handleEdit = (item: VideoAPI["SubList"]["Resp"][0]) => {
   subscribeVisible.value = true;
@@ -336,6 +529,79 @@ const showHelpModal = ref(false);
 .input {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.analysis-panel {
+  margin-top: 18px;
+  padding: 16px 0;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    line-height: 1.4;
+  }
+}
+
+.analysis-source {
+  margin: 0;
+  color: #666;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.analysis-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.analysis-progress-text {
+  margin: 8px 0 0;
+  color: #666;
+}
+
+.analysis-export-alert {
+  margin: 12px 0;
+}
+
+.analysis-links {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 12px 0;
+
+  a {
+    color: #18a058;
+    text-decoration: none;
+  }
+}
+
+.analysis-summary {
+  margin-top: 12px;
+
+  h4 {
+    margin: 0 0 8px;
+  }
+}
+
+.analysis-summary pre,
+.analysis-transcript {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+  font-family: inherit;
 }
 
 .help-content {

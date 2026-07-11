@@ -15,6 +15,7 @@ export enum TaskType {
   sync = "sync",
   flvRepair = "flvRepair",
   liveSummary = "liveSummary",
+  douyinVideoAnalysis = "douyinVideoAnalysis",
 }
 
 export enum NotificationType {
