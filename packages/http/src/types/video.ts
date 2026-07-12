@@ -45,6 +45,21 @@ export type VideoAPI = {
   exportDouyinVideoAnalysis: {
     Args: {
       taskId: string;
+      exportTargets?: {
+        feishu?: {
+          enabled: boolean;
+          mode?: "append" | "create";
+          documentId?: string;
+          folderToken?: string;
+          titleTemplate?: string;
+        };
+        notion?: {
+          enabled: boolean;
+          mode?: "append" | "create_child_page";
+          pageId?: string;
+          titleTemplate?: string;
+        };
+      };
     };
     Resp: {
       results: DouyinVideoAnalysisOutput["exportResults"];

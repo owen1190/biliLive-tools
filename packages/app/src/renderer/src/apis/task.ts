@@ -254,8 +254,9 @@ const analyzeDouyinVideo = async (
 
 const exportDouyinVideoAnalysis = async (
   taskId: string,
+  data?: Omit<VideoAPI["exportDouyinVideoAnalysis"]["Args"], "taskId">,
 ): Promise<VideoAPI["exportDouyinVideoAnalysis"]["Resp"]> => {
-  const res = await request.post(`/video/ai-analysis/${taskId}/export`);
+  const res = await request.post(`/video/ai-analysis/${taskId}/export`, data);
   return res.data;
 };
 

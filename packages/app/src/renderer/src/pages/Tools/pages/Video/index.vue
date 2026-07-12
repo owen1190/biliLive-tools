@@ -47,6 +47,58 @@
           :autosize="{ minRows: 3, maxRows: 8 }"
           placeholder="AI 分析提示词，留空则使用默认短视频分析提示词"
         />
+
+        <div class="analysis-cloud-export">
+          <div class="analysis-cloud-export-title">飞书 / Notion 导出位置</div>
+          <div class="analysis-cloud-export-grid">
+            <div class="analysis-cloud-export-target">
+              <n-checkbox v-model:checked="analysisCloudExport.feishu.enabled">
+                飞书文档
+              </n-checkbox>
+              <n-radio-group
+                v-model:value="analysisCloudExport.feishu.mode"
+                :disabled="!analysisCloudExport.feishu.enabled"
+              >
+                <n-space>
+                  <n-radio value="append">追加到已有文档</n-radio>
+                  <n-radio value="create">在文件夹中新建文档</n-radio>
+                </n-space>
+              </n-radio-group>
+              <n-input
+                v-if="analysisCloudExport.feishu.mode === 'append'"
+                v-model:value="analysisCloudExport.feishu.documentId"
+                :disabled="!analysisCloudExport.feishu.enabled"
+                placeholder="飞书文档链接或 document_id"
+              />
+              <n-input
+                v-else
+                v-model:value="analysisCloudExport.feishu.folderToken"
+                :disabled="!analysisCloudExport.feishu.enabled"
+                placeholder="飞书文件夹链接或 folder token"
+              />
+            </div>
+
+            <div class="analysis-cloud-export-target">
+              <n-checkbox v-model:checked="analysisCloudExport.notion.enabled">
+                Notion
+              </n-checkbox>
+              <n-radio-group
+                v-model:value="analysisCloudExport.notion.mode"
+                :disabled="!analysisCloudExport.notion.enabled"
+              >
+                <n-space>
+                  <n-radio value="append">追加到已有页面</n-radio>
+                  <n-radio value="create_child_page">新建子页面</n-radio>
+                </n-space>
+              </n-radio-group>
+              <n-input
+                v-model:value="analysisCloudExport.notion.pageId"
+                :disabled="!analysisCloudExport.notion.enabled"
+                placeholder="Notion 页面链接或 page_id"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <section v-if="analysisTask" class="analysis-panel">
@@ -268,6 +320,10 @@ type AnalysisOutput = {
   }>;
 };
 
+type AnalysisCloudExportTargets = NonNullable<
+  VideoAPI["exportDouyinVideoAnalysis"]["Args"]["exportTargets"]
+>;
+
 const notice = useNotification();
 const url = ref("");
 const downloadOptions = ref({
@@ -443,16 +499,43 @@ const analysisDownloading = ref(false);
 const analysisTask = ref<Task | null>(null);
 const analysisOutputDir = ref("");
 const analysisPrompt = ref("");
+const analysisCloudExport = reactive({
+  feishu: {
+    enabled: false,
+    mode: "create" as NonNullable<AnalysisCloudExportTargets["feishu"]>["mode"],
+    documentId: "",
+    folderToken: "",
+  },
+  notion: {
+    enabled: false,
+    mode: "create_child_page" as NonNullable<AnalysisCloudExportTargets["notion"]>["mode"],
+    pageId: "",
+  },
+});
 let analysisTimer: number | null = null;
 const ANALYSIS_OUTPUT_DIR_STORAGE_KEY = "douyin-video-analysis-output-dir";
 const ANALYSIS_PROMPT_STORAGE_KEY = "douyin-video-analysis-prompt";
+const ANALYSIS_CLOUD_EXPORT_STORAGE_KEY = "douyin-video-analysis-cloud-export";
 const isWeb = window.isWeb;
 
 const analysisOutput = computed(() => analysisTask.value?.output as AnalysisOutput | undefined);
+const hasAnalysisCloudExportTargets = computed(
+  () => analysisCloudExport.feishu.enabled || analysisCloudExport.notion.enabled,
+);
 
 onMounted(() => {
   analysisOutputDir.value = localStorage.getItem(ANALYSIS_OUTPUT_DIR_STORAGE_KEY) || "";
   analysisPrompt.value = localStorage.getItem(ANALYSIS_PROMPT_STORAGE_KEY) || "";
+  const storedCloudExport = localStorage.getItem(ANALYSIS_CLOUD_EXPORT_STORAGE_KEY);
+  if (storedCloudExport) {
+    try {
+      const parsed = JSON.parse(storedCloudExport);
+      Object.assign(analysisCloudExport.feishu, parsed.feishu || {});
+      Object.assign(analysisCloudExport.notion, parsed.notion || {});
+    } catch {
+      localStorage.removeItem(ANALYSIS_CLOUD_EXPORT_STORAGE_KEY);
+    }
+  }
 });
 
 watch(analysisOutputDir, (value) => {
@@ -462,6 +545,14 @@ watch(analysisOutputDir, (value) => {
 watch(analysisPrompt, (value) => {
   localStorage.setItem(ANALYSIS_PROMPT_STORAGE_KEY, value);
 });
+
+watch(
+  analysisCloudExport,
+  (value) => {
+    localStorage.setItem(ANALYSIS_CLOUD_EXPORT_STORAGE_KEY, JSON.stringify(value));
+  },
+  { deep: true },
+);
 
 const stopAnalysisPolling = () => {
   if (!analysisTimer) return;
@@ -521,12 +612,73 @@ const selectAnalysisOutputDir = async () => {
   analysisOutputDir.value = dir;
 };
 
+const validateAnalysisCloudExportOptions = () => {
+  if (!hasAnalysisCloudExportTargets.value) return true;
+
+  if (analysisCloudExport.feishu.enabled) {
+    const requiredValue =
+      analysisCloudExport.feishu.mode === "append"
+        ? analysisCloudExport.feishu.documentId
+        : analysisCloudExport.feishu.folderToken;
+    if (!requiredValue.trim()) {
+      notice.error({
+        title:
+          analysisCloudExport.feishu.mode === "append"
+            ? "请填写飞书文档链接或 document_id"
+            : "请填写飞书文件夹链接或 folder token",
+        duration: 3000,
+      });
+      return false;
+    }
+  }
+
+  if (analysisCloudExport.notion.enabled && !analysisCloudExport.notion.pageId.trim()) {
+    notice.error({
+      title: "请填写 Notion 页面链接或 page_id",
+      duration: 3000,
+    });
+    return false;
+  }
+
+  return true;
+};
+
+const buildAnalysisCloudExportTargets = ():
+  | VideoAPI["exportDouyinVideoAnalysis"]["Args"]["exportTargets"]
+  | undefined => {
+  if (!hasAnalysisCloudExportTargets.value) return undefined;
+  return {
+    feishu: analysisCloudExport.feishu.enabled
+      ? {
+          enabled: true,
+          mode: analysisCloudExport.feishu.mode,
+          documentId: analysisCloudExport.feishu.documentId.trim(),
+          folderToken: analysisCloudExport.feishu.folderToken.trim(),
+          titleTemplate: "{title} - {time}",
+        }
+      : undefined,
+    notion: analysisCloudExport.notion.enabled
+      ? {
+          enabled: true,
+          mode: analysisCloudExport.notion.mode,
+          pageId: analysisCloudExport.notion.pageId.trim(),
+          titleTemplate: "{title} - {time}",
+        }
+      : undefined,
+  };
+};
+
 const exportAnalysis = async () => {
   if (!analysisTask.value) return;
+  if (!validateAnalysisCloudExportOptions()) return;
 
   analysisExporting.value = true;
   try {
-    const res = await taskApi.exportDouyinVideoAnalysis(analysisTask.value.taskId);
+    const exportTargets = buildAnalysisCloudExportTargets();
+    const res = await taskApi.exportDouyinVideoAnalysis(
+      analysisTask.value.taskId,
+      exportTargets ? { exportTargets } : undefined,
+    );
     analysisTask.value = {
       ...analysisTask.value,
       output: res.output,
@@ -612,6 +764,33 @@ const showHelpModal = ref(false);
   flex: none;
   color: #555;
   font-size: 13px;
+}
+
+.analysis-cloud-export {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-cloud-export-title {
+  color: #555;
+  font-size: 13px;
+}
+
+.analysis-cloud-export-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analysis-cloud-export-target {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
 }
 
 .analysis-panel {
@@ -710,6 +889,10 @@ const showHelpModal = ref(false);
 
   .analysis-option-label {
     align-self: flex-start;
+  }
+
+  .analysis-cloud-export-grid {
+    grid-template-columns: 1fr;
   }
 }
 

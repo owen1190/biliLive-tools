@@ -18,6 +18,7 @@ import { replaceExtName } from "@biliLive-tools/shared/utils/index.js";
 import { appConfig, fileCache } from "../index.js";
 
 import type { VideoAPI } from "../types/video.js";
+import type { AppConfig } from "@biliLive-tools/types";
 
 const router = new Router({
   prefix: "/video",
@@ -83,12 +84,60 @@ function getCompletedDouyinAnalysisOutput(task: DouyinVideoAnalysisTask) {
 
 router.post("/ai-analysis/:taskId/export", async (ctx) => {
   const task = getDouyinAnalysisTask(ctx.params.taskId);
-  const results = await task.exportToDocuments(appConfig.getAll().ai.liveSummary);
+  const data = ctx.request.body as VideoAPI["exportDouyinVideoAnalysis"]["Args"] | undefined;
+  const config = buildDouyinAnalysisExportConfig(
+    appConfig.getAll().ai.liveSummary,
+    data?.exportTargets,
+  );
+  const results = await task.exportToDocuments(config);
   ctx.body = {
     results,
     output: task.output,
   };
 });
+
+function buildDouyinAnalysisExportConfig(
+  config: AppConfig["ai"]["liveSummary"],
+  exportTargets?: VideoAPI["exportDouyinVideoAnalysis"]["Args"]["exportTargets"],
+) {
+  if (!exportTargets?.feishu && !exportTargets?.notion) return config;
+
+  return {
+    ...config,
+    exportTargets: {
+      ...config.exportTargets,
+      feishu: exportTargets.feishu
+        ? {
+            ...config.exportTargets.feishu,
+            enabled: exportTargets.feishu.enabled,
+            mode: exportTargets.feishu.mode || config.exportTargets.feishu.mode || "append",
+            documentId: exportTargets.feishu.documentId?.trim() || "",
+            folderToken: exportTargets.feishu.folderToken?.trim() || "",
+            titleTemplate:
+              exportTargets.feishu.titleTemplate?.trim() ||
+              config.exportTargets.feishu.titleTemplate,
+          }
+        : {
+            ...config.exportTargets.feishu,
+            enabled: false,
+          },
+      notion: exportTargets.notion
+        ? {
+            ...config.exportTargets.notion,
+            enabled: exportTargets.notion.enabled,
+            mode: exportTargets.notion.mode || config.exportTargets.notion.mode || "append",
+            pageId: exportTargets.notion.pageId?.trim() || "",
+            titleTemplate:
+              exportTargets.notion.titleTemplate?.trim() ||
+              config.exportTargets.notion.titleTemplate,
+          }
+        : {
+            ...config.exportTargets.notion,
+            enabled: false,
+          },
+    },
+  };
+}
 
 router.get("/ai-analysis/:taskId/document", async (ctx) => {
   const task = getDouyinAnalysisTask(ctx.params.taskId);
