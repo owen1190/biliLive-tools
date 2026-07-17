@@ -1,44 +1,44 @@
 <template>
   <div class="container">
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px">
+    <div class="recorder-toolbar">
       <n-input
         v-model:value="params.name"
         placeholder="备注或房间号"
-        style="width: 140px"
+        class="toolbar-control"
         clearable
       />
       <n-select
         v-model:value="params.platform"
         :options="platformOptions"
         placeholder="平台"
-        style="width: 140px"
+        class="toolbar-control"
         clearable
       />
       <n-select
         v-model:value="params.recordStatus"
         :options="statusOptions"
         placeholder="录制状态"
-        style="width: 140px"
+        class="toolbar-control"
         clearable
       />
       <n-select
         v-model:value="params.autoCheck"
         :options="recordOptions"
         placeholder="监听状态"
-        style="width: 140px"
+        class="toolbar-control"
         clearable
       />
       <n-select
         v-model:value="recorderLocalParams.pageSize"
         :options="pageSizeOptions"
         placeholder="每页显示"
-        style="width: 110px"
+        class="toolbar-control toolbar-control--small"
       />
       <n-select
         v-model:value="recorderLocalParams.view"
         :options="viewOptions"
         placeholder="视图"
-        style="width: 110px"
+        class="toolbar-control toolbar-control--small"
       />
       <SortButton
         :field="sortField"
@@ -54,8 +54,13 @@
         @update:direction="handleSortDirectionChange"
       />
       <ColumnSelector v-model="visibleColumns" :columns="columnConfig" />
-      <n-button type="warning" @click="getLiveInfo(true)">刷新</n-button>
-      <ButtonGroup :options="actionBtns" @click="handleActionClick">添加</ButtonGroup>
+      <n-button class="toolbar-action" type="warning" @click="getLiveInfo(true)">刷新</n-button>
+      <ButtonGroup
+        class="toolbar-action toolbar-action-group"
+        :options="actionBtns"
+        @click="handleActionClick"
+        >添加</ButtonGroup
+      >
     </div>
 
     <template v-if="list.length > 0">
@@ -787,6 +792,31 @@ const handleActionClick = (key?: string | number) => {
 </script>
 
 <style scoped lang="less">
+.recorder-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 20px;
+
+  .toolbar-control {
+    width: 140px;
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+
+  .toolbar-control--small {
+    width: 110px;
+    flex-basis: 110px;
+  }
+
+  .toolbar-action {
+    flex: 0 0 auto;
+  }
+}
+
 .section-container {
   display: flex;
   gap: 2px;
@@ -814,5 +844,27 @@ const handleActionClick = (key?: string | number) => {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+@media (max-width: 640px) {
+  .recorder-toolbar {
+    gap: 8px;
+    margin-bottom: 14px;
+
+    .toolbar-control,
+    .toolbar-control--small {
+      width: calc(50% - 4px);
+      flex: 1 1 calc(50% - 4px);
+    }
+
+    .toolbar-action {
+      flex: 1 1 calc(50% - 4px);
+    }
+
+    .toolbar-action-group {
+      flex: 1 1 calc(50% - 4px);
+      min-width: 0;
+    }
+  }
 }
 </style>

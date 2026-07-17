@@ -156,14 +156,15 @@ const stateMap = {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
 }
 .recorder {
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   border-radius: 5px;
   position: relative;
-  // width: 288px;
   flex: 1 0 320px;
   max-width: 400px;
+  min-width: 0;
 
   .cover-container {
     position: relative;
@@ -237,6 +238,7 @@ const stateMap = {
     display: flex;
     gap: 10px;
     margin: 10px;
+    min-width: 0;
     .avatar {
       width: 50px;
       height: 50px;
@@ -246,6 +248,10 @@ const stateMap = {
     .owner {
       font-size: 16px;
       font-weight: bold;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 
@@ -254,6 +260,13 @@ const stateMap = {
     bottom: 5px;
     right: 10px;
     color: var(--text-secondary);
+  }
+}
+
+@media (max-width: 480px) {
+  .recorder {
+    flex-basis: 100%;
+    max-width: none;
   }
 }
 
