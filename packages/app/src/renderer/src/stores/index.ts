@@ -274,6 +274,7 @@ export const useAppConfig = defineStore("appConfig", () => {
         syncType: undefined,
         aliyunpanDriveType: "backup",
         targetPath: "",
+        favoritePaths: [],
       },
       danmu: {
         danmuPresetId: "",
@@ -329,6 +330,11 @@ export const useAppConfig = defineStore("appConfig", () => {
         ignoreSubtitle: false,
         exportSubtitle: true,
       },
+    },
+    video: {
+      subCheckInterval: 60,
+      subSavePath: "",
+      analysisOutputDir: "",
     },
   });
 

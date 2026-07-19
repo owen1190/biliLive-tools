@@ -28,7 +28,28 @@
         placeholder="请输入目标路径"
         style="width: 200px"
       />
+      <n-select
+        v-model:value="selectedFavoritePathId"
+        :options="favoritePathOptions"
+        clearable
+        placeholder="常用目标地址"
+        style="width: 160px"
+        @update:value="applyFavoritePath"
+      />
+      <n-button secondary @click="saveCurrentTargetPathAsFavorite">保存为常用</n-button>
       <n-checkbox v-model:checked="options.removeOrigin"> 完成后移除源文件 </n-checkbox>
+    </div>
+
+    <div v-if="favoritePaths.length" class="favorite-paths">
+      <n-tag
+        v-for="item in favoritePaths"
+        :key="item.id"
+        closable
+        @click="options.targetPath = item.path"
+        @close.stop="removeFavoritePath(item.id)"
+      >
+        {{ item.name }}
+      </n-tag>
     </div>
   </div>
 </template>
@@ -43,6 +64,7 @@ import FileSelect from "@renderer/pages/Tools/pages/FileUpload/components/FileSe
 
 import { useAppConfig } from "@renderer/stores";
 import { syncApi } from "@renderer/apis";
+import { uuid } from "@renderer/utils";
 import hotkeys from "hotkeys-js";
 
 import type { AliyunPanDriveType } from "@biliLive-tools/types";
@@ -60,6 +82,19 @@ const options = toReactive(
 );
 
 const fileList = ref<{ id: string; title: string; path: string; visible: boolean }[]>([]);
+const selectedFavoritePathId = ref<string | null>(null);
+const favoritePaths = computed({
+  get: () => options.favoritePaths || [],
+  set: (value) => {
+    options.favoritePaths = value;
+  },
+});
+const favoritePathOptions = computed(() =>
+  favoritePaths.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+);
 
 onActivated(() => {
   hotkeys("ctrl+enter", function () {
@@ -151,10 +186,69 @@ const clear = () => {
   fileList.value = [];
 };
 
+const applyFavoritePath = (id: string | null) => {
+  if (!id) return;
+  const favorite = favoritePaths.value.find((item) => item.id === id);
+  if (!favorite) return;
+  options.targetPath = favorite.path;
+};
+
+const saveCurrentTargetPathAsFavorite = () => {
+  const targetPath = options.targetPath?.trim();
+  if (!targetPath) {
+    notice.error({
+      title: "请先输入目标路径",
+      duration: 1000,
+    });
+    return;
+  }
+
+  const exists = favoritePaths.value.some((item) => item.path === targetPath);
+  if (exists) {
+    notice.info({
+      title: "该地址已在常用列表中",
+      duration: 1000,
+    });
+    return;
+  }
+
+  favoritePaths.value = [
+    ...favoritePaths.value,
+    {
+      id: uuid(),
+      name: targetPath,
+      path: targetPath,
+    },
+  ];
+  notice.success({
+    title: "已保存为常用地址",
+    duration: 1000,
+  });
+};
+
+const removeFavoritePath = (id: string) => {
+  favoritePaths.value = favoritePaths.value.filter((item) => item.id !== id);
+  if (selectedFavoritePathId.value === id) {
+    selectedFavoritePathId.value = null;
+  }
+};
+
 const fileSelect = ref<InstanceType<typeof FileSelect> | null>(null);
 const addFiles = async () => {
   fileSelect.value?.select();
 };
 </script>
 
-<style scoped lang="less"></style>
+<style scoped lang="less">
+.favorite-paths {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+
+  :deep(.n-tag) {
+    cursor: pointer;
+  }
+}
+</style>

@@ -17,6 +17,32 @@
     <n-form label-placement="left" :label-width="145">
       <n-tabs type="segment" style="margin-top: 10px" class="tabs">
         <n-tab-pane class="tab-pane" name="syncConfig" tab="同步器" display-directive="show:lazy">
+          <n-card class="favorite-path-card" title="常用同步地址">
+            <n-space vertical>
+              <div class="favorite-path-input">
+                <n-input
+                  v-model:value="newFavoritePathName"
+                  placeholder="名称，例如：录播归档"
+                />
+                <n-input
+                  v-model:value="newFavoritePathValue"
+                  placeholder="地址，例如：/录播/{{user}}/{{yyyy}}-{{MM}}"
+                />
+                <n-button type="primary" @click="addFavoritePath">添加</n-button>
+              </div>
+              <n-empty v-if="favoritePaths.length === 0" description="暂无常用地址" />
+              <div v-else class="favorite-path-list">
+                <n-tag
+                  v-for="item in favoritePaths"
+                  :key="item.id"
+                  closable
+                  @close="removeFavoritePath(item.id)"
+                >
+                  {{ item.name }}：{{ item.path }}
+                </n-tag>
+              </div>
+            </n-space>
+          </n-card>
           <div class="sync-config-list">
             <n-card
               v-for="(item, index) in config.sync.syncConfigs"
@@ -319,7 +345,17 @@
               >
               </Tip>
             </template>
-            <n-input v-model:value="editingConfig.folderStructure" placeholder="请输入目录结构" />
+            <div class="folder-structure-editor">
+              <n-input v-model:value="editingConfig.folderStructure" placeholder="请输入目录结构" />
+              <n-select
+                v-model:value="selectedEditingFavoritePathId"
+                :options="favoritePathOptions"
+                clearable
+                placeholder="常用地址"
+                style="width: 160px"
+                @update:value="applyFavoritePathToEditingConfig"
+              />
+            </div>
           </n-form-item>
           <n-form-item label="同步文件类型">
             <n-checkbox-group v-model:value="editingConfig.targetFiles">
@@ -398,6 +434,7 @@ import { uuid, sha256 } from "@renderer/utils";
 
 import { syncApi } from "@renderer/apis";
 import { useConfirm } from "@renderer/hooks";
+import { APP_DEFAULT_CONFIG } from "@biliLive-tools/shared/enum.js";
 
 import type { AppConfig, SyncType, SyncConfig, AliyunPanDriveType } from "@biliLive-tools/types";
 
@@ -639,12 +676,42 @@ const editingConfig = ref<SyncConfig>({
 });
 
 const syncConfigModalVisible = ref(false);
+const selectedEditingFavoritePathId = ref<string | null>(null);
+const newFavoritePathName = ref("");
+const newFavoritePathValue = ref("");
+
+const ensureFileSyncConfig = () => {
+  if (!config.value.tool) {
+    config.value.tool = structuredClone(APP_DEFAULT_CONFIG.tool);
+  }
+  if (!config.value.tool.fileSync) {
+    config.value.tool.fileSync = structuredClone(APP_DEFAULT_CONFIG.tool.fileSync);
+  }
+  config.value.tool.fileSync.favoritePaths ||= [];
+  return config.value.tool.fileSync;
+};
+
+const favoritePaths = computed({
+  get: () => ensureFileSyncConfig().favoritePaths || [],
+  set: (value) => {
+    ensureFileSyncConfig().favoritePaths = value;
+  },
+});
+
+const favoritePathOptions = computed(() =>
+  favoritePaths.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+);
 
 const getSyncSourceLabel = (value: string) => {
-  const options = {
+  const options: Record<string, string> = {
     baiduPCS: "百度网盘",
     aliyunpan: "阿里云盘",
     alist: "alist",
+    pan123: "123网盘",
+    copy: "本地复制",
   };
   return options[value] || value;
 };
@@ -669,6 +736,7 @@ const getTargetFilesLabel = (values: string[]) => {
 
 const addSyncConfig = () => {
   editingConfigIndex.value = null;
+  selectedEditingFavoritePathId.value = null;
   editingConfig.value = {
     id: uuid(),
     name: "",
@@ -683,6 +751,7 @@ const addSyncConfig = () => {
 
 const editSyncConfig = (index: number) => {
   editingConfigIndex.value = index;
+  selectedEditingFavoritePathId.value = null;
   const originalConfig = config.value.sync.syncConfigs[index];
   editingConfig.value = {
     id: originalConfig.id,
@@ -743,6 +812,45 @@ const saveSyncConfig = () => {
   }
   syncConfigModalVisible.value = false;
 };
+
+const addFavoritePath = () => {
+  const path = newFavoritePathValue.value.trim();
+  const name = newFavoritePathName.value.trim() || path;
+  if (!path) {
+    notice.error("请先输入常用地址");
+    return;
+  }
+  if (favoritePaths.value.some((item) => item.path === path)) {
+    notice.info("该地址已在常用列表中");
+    return;
+  }
+
+  favoritePaths.value = [
+    ...favoritePaths.value,
+    {
+      id: uuid(),
+      name,
+      path,
+    },
+  ];
+  newFavoritePathName.value = "";
+  newFavoritePathValue.value = "";
+  notice.success("常用地址已添加");
+};
+
+const removeFavoritePath = (id: string) => {
+  favoritePaths.value = favoritePaths.value.filter((item) => item.id !== id);
+  if (selectedEditingFavoritePathId.value === id) {
+    selectedEditingFavoritePathId.value = null;
+  }
+};
+
+const applyFavoritePathToEditingConfig = (id: string | null) => {
+  if (!id) return;
+  const favorite = favoritePaths.value.find((item) => item.id === id);
+  if (!favorite) return;
+  editingConfig.value.folderStructure = favorite.path;
+};
 </script>
 
 <style scoped lang="less">
@@ -789,6 +897,36 @@ const saveSyncConfig = () => {
   }
   &:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.favorite-path-card {
+  margin: 16px;
+}
+
+.favorite-path-input {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(240px, 1fr) auto;
+  gap: 8px;
+}
+
+.favorite-path-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.folder-structure-editor {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .favorite-path-input,
+  .folder-structure-editor {
+    display: flex;
+    flex-direction: column;
   }
 }
 </style>

@@ -119,6 +119,7 @@ export const APP_DEFAULT_CONFIG: AppConfig = {
       syncType: undefined,
       aliyunpanDriveType: "backup",
       targetPath: "/",
+      favoritePaths: [],
     },
     danmu: {
       danmuPresetId: "default",
@@ -513,6 +514,7 @@ export const APP_DEFAULT_CONFIG: AppConfig = {
   video: {
     subCheckInterval: 60,
     subSavePath: "",
+    analysisOutputDir: "",
   },
   recorders: [],
   virtualRecord: {

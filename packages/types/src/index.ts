@@ -300,6 +300,12 @@ export type ToolConfig = {
     aliyunpanDriveType?: AliyunPanDriveType;
     /** 目标路径 */
     targetPath: string;
+    /** 常用目标地址 */
+    favoritePaths?: {
+      id: string;
+      name: string;
+      path: string;
+    }[];
   };
 };
 
@@ -898,6 +904,8 @@ export interface AppConfig {
     subCheckInterval: number;
     /** 保存路径 */
     subSavePath: string;
+    /** 抖音 AI 分析文档保存目录 */
+    analysisOutputDir?: string;
   };
   // 虚拟录制
   virtualRecord: {

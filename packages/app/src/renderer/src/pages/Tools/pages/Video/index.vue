@@ -300,8 +300,8 @@ import SubscribeModal from "./components/SubscribeModal.vue";
 import SubVideoList from "./components/SubVideoList.vue";
 import { sanitizeFileName } from "@renderer/utils";
 import { showDirectoryDialog } from "@renderer/utils/fileSystem";
-import { taskApi } from "@renderer/apis";
-import { videoApi } from "@renderer/apis";
+import { configApi, taskApi, videoApi } from "@renderer/apis";
+import { useAppConfig } from "@renderer/stores";
 
 import type { Task } from "@renderer/types";
 import type { VideoAPI } from "@biliLive-tools/http/types/video.js";
@@ -497,6 +497,7 @@ const analysisSubmitting = ref(false);
 const analysisExporting = ref(false);
 const analysisDownloading = ref(false);
 const analysisTask = ref<Task | null>(null);
+const { appConfig } = storeToRefs(useAppConfig());
 const analysisOutputDir = ref("");
 const analysisPrompt = ref("");
 const analysisCloudExport = reactive({
@@ -517,14 +518,60 @@ const ANALYSIS_OUTPUT_DIR_STORAGE_KEY = "douyin-video-analysis-output-dir";
 const ANALYSIS_PROMPT_STORAGE_KEY = "douyin-video-analysis-prompt";
 const ANALYSIS_CLOUD_EXPORT_STORAGE_KEY = "douyin-video-analysis-cloud-export";
 const isWeb = window.isWeb;
+let analysisOutputDirLoaded = false;
+let analysisOutputDirSaveTimer: number | null = null;
 
 const analysisOutput = computed(() => analysisTask.value?.output as AnalysisOutput | undefined);
 const hasAnalysisCloudExportTargets = computed(
   () => analysisCloudExport.feishu.enabled || analysisCloudExport.notion.enabled,
 );
 
+const ensureVideoConfig = () => {
+  appConfig.value.video ||= {
+    subCheckInterval: 60,
+    subSavePath: "",
+    analysisOutputDir: "",
+  };
+  appConfig.value.video.analysisOutputDir ||= "";
+  return appConfig.value.video;
+};
+
+const saveAnalysisOutputDir = async (value: string) => {
+  const videoConfig = {
+    ...ensureVideoConfig(),
+    analysisOutputDir: value,
+  };
+  appConfig.value.video = videoConfig;
+  await configApi.set("video", videoConfig);
+};
+
+const scheduleSaveAnalysisOutputDir = (value: string) => {
+  if (!analysisOutputDirLoaded) return;
+  if (analysisOutputDirSaveTimer) {
+    window.clearTimeout(analysisOutputDirSaveTimer);
+  }
+  analysisOutputDirSaveTimer = window.setTimeout(() => {
+    analysisOutputDirSaveTimer = null;
+    saveAnalysisOutputDir(value).catch((error) => {
+      notice.error({
+        title: "保存 AI 分析文档目录失败",
+        content: error?.message || String(error),
+        duration: 3000,
+      });
+    });
+  }, 300);
+};
+
 onMounted(() => {
-  analysisOutputDir.value = localStorage.getItem(ANALYSIS_OUTPUT_DIR_STORAGE_KEY) || "";
+  const videoConfig = ensureVideoConfig();
+  const legacyOutputDir = localStorage.getItem(ANALYSIS_OUTPUT_DIR_STORAGE_KEY) || "";
+  analysisOutputDir.value = videoConfig.analysisOutputDir || legacyOutputDir;
+  if (!videoConfig.analysisOutputDir && legacyOutputDir) {
+    saveAnalysisOutputDir(legacyOutputDir).catch(() => {
+      // 旧缓存迁移失败不影响本次页面使用。
+    });
+  }
+  analysisOutputDirLoaded = true;
   analysisPrompt.value = localStorage.getItem(ANALYSIS_PROMPT_STORAGE_KEY) || "";
   const storedCloudExport = localStorage.getItem(ANALYSIS_CLOUD_EXPORT_STORAGE_KEY);
   if (storedCloudExport) {
@@ -540,6 +587,7 @@ onMounted(() => {
 
 watch(analysisOutputDir, (value) => {
   localStorage.setItem(ANALYSIS_OUTPUT_DIR_STORAGE_KEY, value);
+  scheduleSaveAnalysisOutputDir(value);
 });
 
 watch(analysisPrompt, (value) => {
@@ -712,6 +760,13 @@ const openAnalysisDocumentFolder = async () => {
 
 onUnmounted(() => {
   stopAnalysisPolling();
+  if (analysisOutputDirSaveTimer) {
+    window.clearTimeout(analysisOutputDirSaveTimer);
+    analysisOutputDirSaveTimer = null;
+    saveAnalysisOutputDir(analysisOutputDir.value).catch(() => {
+      // 页面关闭时补写失败不阻塞卸载。
+    });
+  }
 });
 
 const handleEdit = (item: VideoAPI["SubList"]["Resp"][0]) => {
