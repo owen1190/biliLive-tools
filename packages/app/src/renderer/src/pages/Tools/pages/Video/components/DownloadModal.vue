@@ -166,6 +166,19 @@ const emits = defineEmits<{
 }>();
 
 const notice = useNotification();
+
+const applyRecorderSavePath = () => {
+  const recorderSavePath = appConfig.value.recorder?.savePath;
+  if (!recorderSavePath) return;
+  options.savePath = recorderSavePath;
+};
+
+watch(showModal, (visible) => {
+  if (visible) {
+    applyRecorderSavePath();
+  }
+});
+
 const download = () => {
   // 如果开启了只下载弹幕，但没有选择弹幕格式，则提示错误
   if (props.cOptions.hasDanmuOnlyOptions && options.onlyDanmu && options.danmu === "none") {

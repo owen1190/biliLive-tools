@@ -515,6 +515,7 @@ export const APP_DEFAULT_CONFIG: AppConfig = {
     subCheckInterval: 60,
     subSavePath: "",
     analysisOutputDir: "",
+    localFavoritePaths: [],
   },
   recorders: [],
   virtualRecord: {

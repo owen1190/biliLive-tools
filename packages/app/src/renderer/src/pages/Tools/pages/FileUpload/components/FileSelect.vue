@@ -63,16 +63,22 @@ const emits = defineEmits<{
 const dropZoneRef = ref<HTMLElement | null>(null);
 
 const select = async () => {
+  await selectFromPath();
+};
+
+const selectFromPath = async (defaultPath?: string) => {
   let files: string[] | undefined = [];
   if (window.isWeb) {
     files = await showDirectoryDialog({
       type: "file",
       multi: true,
       exts: props.extensions,
+      defaultPath,
     });
   } else {
     files = await window.api.openFile({
       multi: true,
+      defaultPath,
       filters: [
         {
           name: "file",
@@ -148,6 +154,7 @@ const { isOverDropZone } = useDropZone(dropZoneRef, {
 
 defineExpose({
   select,
+  selectFromPath,
 });
 </script>
 

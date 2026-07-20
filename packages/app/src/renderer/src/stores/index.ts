@@ -335,6 +335,7 @@ export const useAppConfig = defineStore("appConfig", () => {
       subCheckInterval: 60,
       subSavePath: "",
       analysisOutputDir: "",
+      localFavoritePaths: [],
     },
   });
 

@@ -906,6 +906,12 @@ export interface AppConfig {
     subSavePath: string;
     /** 抖音 AI 分析文档保存目录 */
     analysisOutputDir?: string;
+    /** 常用本地视频目录 */
+    localFavoritePaths?: {
+      id: string;
+      name: string;
+      path: string;
+    }[];
   };
   // 虚拟录制
   virtualRecord: {

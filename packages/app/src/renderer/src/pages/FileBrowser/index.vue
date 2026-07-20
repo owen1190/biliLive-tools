@@ -23,7 +23,36 @@
       </div>
 
       <n-card size="small">
-        <n-space justify="space-between" align="center" wrap>
+        <n-space vertical>
+          <div class="path-editor">
+            <n-input
+              v-model:value="browsePath"
+              placeholder="请输入本地视频目录"
+              :title="browsePath"
+              @keyup.enter="openBrowsePath"
+            />
+            <n-select
+              v-model:value="selectedFavoritePathId"
+              :options="favoritePathOptions"
+              clearable
+              placeholder="常用本地目录"
+              style="width: 180px"
+              @update:value="applyFavoritePath"
+            />
+            <n-button @click="openBrowsePath">打开</n-button>
+            <n-button secondary @click="saveBrowsePathAsFavorite">保存为常用</n-button>
+          </div>
+          <div v-if="favoritePaths.length" class="favorite-paths">
+            <n-tag
+              v-for="item in favoritePaths"
+              :key="item.id"
+              closable
+              @click="openFavoritePath(item.path)"
+              @close.stop="removeFavoritePath(item.id)"
+            >
+              {{ item.name }}
+            </n-tag>
+          </div>
           <n-text depth="3">当前路径：{{ currentPath || "--" }}</n-text>
         </n-space>
       </n-card>
@@ -42,10 +71,13 @@ import { NButton, NTag, NText } from "naive-ui";
 import { fileBrowserApi } from "@renderer/apis";
 import { useConfirm } from "@renderer/hooks";
 import { useNotice } from "@renderer/hooks/useNotice";
+import { useAppConfig } from "@renderer/stores";
+import { uuid } from "@renderer/utils";
 import { toVideoPlayerPage } from "@renderer/utils/pages";
 
 import type { DataTableColumns } from "naive-ui";
 import type { FileBrowserItem } from "@renderer/apis/fileBrowser";
+import type { AppConfig } from "@biliLive-tools/types";
 
 defineOptions({
   name: "FileBrowser",
@@ -56,15 +88,48 @@ interface BreadcrumbItem {
   path: string;
 }
 
+type LocalFavoritePathList = NonNullable<AppConfig["video"]["localFavoritePaths"]>;
+
 const loading = ref(false);
 const items = ref<FileBrowserItem[]>([]);
 const rootPath = ref("");
 const currentPath = ref("");
+const browsePath = ref("");
 const parentPath = ref<string | null>(null);
 const deleteEnabled = ref(false);
+const selectedFavoritePathId = ref<string | null>(null);
 
 const confirm = useConfirm();
 const notice = useNotice();
+const appConfigStore = useAppConfig();
+const { appConfig } = storeToRefs(appConfigStore);
+
+const ensureVideoConfig = () => {
+  appConfig.value.video ||= {
+    subCheckInterval: 60,
+    subSavePath: "",
+    analysisOutputDir: "",
+    localFavoritePaths: [],
+  };
+  appConfig.value.video.localFavoritePaths ||= [];
+  return appConfig.value.video;
+};
+
+const favoritePaths = computed(() => ensureVideoConfig().localFavoritePaths || []);
+
+const updateFavoritePaths = async (value: LocalFavoritePathList) => {
+  await appConfigStore.set("video", {
+    ...ensureVideoConfig(),
+    localFavoritePaths: value,
+  });
+};
+
+const favoritePathOptions = computed(() =>
+  favoritePaths.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+);
 
 const pathSeparator = computed(() => (rootPath.value.includes("\\") ? "\\" : "/"));
 
@@ -143,6 +208,7 @@ const fetchList = async (path?: string) => {
     items.value = data.list;
     rootPath.value = data.rootPath;
     currentPath.value = data.currentPath;
+    browsePath.value = data.currentPath;
     parentPath.value = data.parentPath;
     deleteEnabled.value = data.deleteEnabled;
   } catch (error: any) {
@@ -167,6 +233,54 @@ const goParent = async () => {
 
 const refreshCurrent = async () => {
   await fetchList(currentPath.value || undefined);
+};
+
+const openBrowsePath = async () => {
+  const targetPath = browsePath.value.trim();
+  if (!targetPath) return;
+  await fetchList(targetPath);
+};
+
+const applyFavoritePath = async (id: string | null) => {
+  if (!id) return;
+  const favorite = favoritePaths.value.find((item) => item.id === id);
+  if (!favorite) return;
+  browsePath.value = favorite.path;
+  await fetchList(favorite.path);
+};
+
+const openFavoritePath = async (path: string) => {
+  browsePath.value = path;
+  await fetchList(path);
+};
+
+const saveBrowsePathAsFavorite = async () => {
+  const targetPath = browsePath.value.trim();
+  if (!targetPath) {
+    notice.error("请先输入本地视频目录");
+    return;
+  }
+  if (favoritePaths.value.some((item) => item.path === targetPath)) {
+    notice.info("该目录已在常用列表中");
+    return;
+  }
+
+  await updateFavoritePaths([
+    ...favoritePaths.value,
+    {
+      id: uuid(),
+      name: window.path.basename(targetPath) || targetPath,
+      path: targetPath,
+    },
+  ]);
+  notice.success("已保存为常用目录");
+};
+
+const removeFavoritePath = async (id: string) => {
+  await updateFavoritePaths(favoritePaths.value.filter((item) => item.id !== id));
+  if (selectedFavoritePathId.value === id) {
+    selectedFavoritePathId.value = null;
+  }
 };
 
 const downloadFile = async (row: FileBrowserItem) => {
@@ -351,5 +465,30 @@ onMounted(() => {
 
 .breadcrumb-link {
   cursor: pointer;
+}
+
+.path-editor {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.favorite-paths {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  :deep(.n-tag) {
+    cursor: pointer;
+  }
+}
+
+@media (max-width: 720px) {
+  .path-editor {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

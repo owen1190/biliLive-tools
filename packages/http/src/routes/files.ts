@@ -46,7 +46,7 @@ function isSubPath(targetPath: string, rootPath: string) {
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-function getRootPath() {
+function getRecorderRootPath() {
   const webhookConfig = appConfig.get("webhook");
   const recorderConfig = appConfig.get("recorder");
   const rootPath = webhookConfig?.recoderFolder || recorderConfig?.savePath;
@@ -54,6 +54,19 @@ function getRootPath() {
     throw new Error("未配置录制目录");
   }
   return normalizePath(rootPath);
+}
+
+function getBrowseRoots() {
+  const defaultRootPath = getRecorderRootPath();
+  const videoConfig = appConfig.get("video");
+  const roots = [
+    defaultRootPath,
+    ...(videoConfig?.localFavoritePaths || []).map((item) => item.path).filter(Boolean),
+  ].map((item) => normalizePath(item));
+  return {
+    defaultRootPath,
+    roots: Array.from(new Set(roots)).sort((left, right) => right.length - left.length),
+  };
 }
 
 function getAllowedDeleteDirs() {
@@ -99,11 +112,12 @@ async function ensureDirectory(dirPath: string) {
 }
 
 async function resolveBrowsePath(inputPath?: string) {
-  const rootPath = getRootPath();
-  await ensureDirectory(rootPath);
-  const currentPath = inputPath ? normalizePath(inputPath) : rootPath;
-  if (!isSubPath(currentPath, rootPath)) {
-    throw new Error("访问路径超出录制目录范围");
+  const { defaultRootPath, roots } = getBrowseRoots();
+  await ensureDirectory(defaultRootPath);
+  const currentPath = inputPath ? normalizePath(inputPath) : defaultRootPath;
+  const rootPath = roots.find((root) => isSubPath(currentPath, root));
+  if (!rootPath) {
+    throw new Error("访问路径超出允许的文件浏览目录范围");
   }
   const stat = await fs.stat(currentPath).catch(() => null);
   if (!stat || !stat.isDirectory()) {

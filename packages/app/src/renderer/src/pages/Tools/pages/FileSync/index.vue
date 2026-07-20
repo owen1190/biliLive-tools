@@ -9,6 +9,34 @@
 
     <FileSelect ref="fileSelect" v-model="fileList" :sort="false" :extensions="['*']"></FileSelect>
 
+    <div class="local-path-tools">
+      <n-select
+        v-model:value="selectedLocalFavoritePathId"
+        :options="localFavoritePathOptions"
+        clearable
+        placeholder="常用本地视频目录"
+        style="width: 200px"
+      />
+      <n-button secondary :disabled="!selectedLocalFavoritePathId" @click="addFilesFromLocalFavoritePath">
+        从常用目录选择
+      </n-button>
+      <n-button secondary :disabled="fileList.length === 0" @click="saveSelectedFileDirAsFavorite">
+        保存已选目录为常用
+      </n-button>
+    </div>
+
+    <div v-if="localFavoritePaths.length" class="favorite-paths">
+      <n-tag
+        v-for="item in localFavoritePaths"
+        :key="item.id"
+        closable
+        @click="addFilesFromPath(item.path)"
+        @close.stop="removeLocalFavoritePath(item.id)"
+      >
+        {{ item.name }}
+      </n-tag>
+    </div>
+
     <div class="flex align-center" style="margin-top: 10px; gap: 10px; justify-content: center">
       <n-select
         v-model:value="options.syncType"
@@ -67,10 +95,13 @@ import { syncApi } from "@renderer/apis";
 import { uuid } from "@renderer/utils";
 import hotkeys from "hotkeys-js";
 
-import type { AliyunPanDriveType } from "@biliLive-tools/types";
+import type { AliyunPanDriveType, AppConfig } from "@biliLive-tools/types";
+
+type LocalFavoritePathList = NonNullable<AppConfig["video"]["localFavoritePaths"]>;
 
 const notice = useNotification();
-const { appConfig } = storeToRefs(useAppConfig());
+const appConfigStore = useAppConfig();
+const { appConfig } = storeToRefs(appConfigStore);
 
 const options = toReactive(
   computed({
@@ -83,6 +114,7 @@ const options = toReactive(
 
 const fileList = ref<{ id: string; title: string; path: string; visible: boolean }[]>([]);
 const selectedFavoritePathId = ref<string | null>(null);
+const selectedLocalFavoritePathId = ref<string | null>(null);
 const favoritePaths = computed({
   get: () => options.favoritePaths || [],
   set: (value) => {
@@ -91,6 +123,31 @@ const favoritePaths = computed({
 });
 const favoritePathOptions = computed(() =>
   favoritePaths.value.map((item) => ({
+    label: item.name,
+    value: item.id,
+  })),
+);
+
+const ensureVideoConfig = () => {
+  appConfig.value.video ||= {
+    subCheckInterval: 60,
+    subSavePath: "",
+    analysisOutputDir: "",
+    localFavoritePaths: [],
+  };
+  appConfig.value.video.localFavoritePaths ||= [];
+  return appConfig.value.video;
+};
+
+const localFavoritePaths = computed(() => ensureVideoConfig().localFavoritePaths || []);
+const updateLocalFavoritePaths = async (value: LocalFavoritePathList) => {
+  await appConfigStore.set("video", {
+    ...ensureVideoConfig(),
+    localFavoritePaths: value,
+  });
+};
+const localFavoritePathOptions = computed(() =>
+  localFavoritePaths.value.map((item) => ({
     label: item.name,
     value: item.id,
   })),
@@ -237,9 +294,67 @@ const fileSelect = ref<InstanceType<typeof FileSelect> | null>(null);
 const addFiles = async () => {
   fileSelect.value?.select();
 };
+
+const addFilesFromPath = async (path: string) => {
+  fileSelect.value?.selectFromPath(path);
+};
+
+const addFilesFromLocalFavoritePath = async () => {
+  if (!selectedLocalFavoritePathId.value) return;
+  const favorite = localFavoritePaths.value.find((item) => item.id === selectedLocalFavoritePathId.value);
+  if (!favorite) return;
+  await addFilesFromPath(favorite.path);
+};
+
+const saveSelectedFileDirAsFavorite = async () => {
+  const file = fileList.value[0];
+  if (!file) {
+    notice.error({
+      title: "请先选择一个本地文件",
+      duration: 1000,
+    });
+    return;
+  }
+  const dir = window.path.dirname(file.path);
+  if (localFavoritePaths.value.some((item) => item.path === dir)) {
+    notice.info({
+      title: "该目录已在常用列表中",
+      duration: 1000,
+    });
+    return;
+  }
+
+  await updateLocalFavoritePaths([
+    ...localFavoritePaths.value,
+    {
+      id: uuid(),
+      name: window.path.basename(dir) || dir,
+      path: dir,
+    },
+  ]);
+  notice.success({
+    title: "已保存为常用本地目录",
+    duration: 1000,
+  });
+};
+
+const removeLocalFavoritePath = async (id: string) => {
+  await updateLocalFavoritePaths(localFavoritePaths.value.filter((item) => item.id !== id));
+  if (selectedLocalFavoritePathId.value === id) {
+    selectedLocalFavoritePathId.value = null;
+  }
+};
 </script>
 
 <style scoped lang="less">
+.local-path-tools {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 .favorite-paths {
   display: flex;
   justify-content: center;
