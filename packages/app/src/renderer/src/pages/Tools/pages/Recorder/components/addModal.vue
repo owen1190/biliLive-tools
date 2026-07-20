@@ -667,6 +667,55 @@
               >
             </n-form-item>
           </template>
+
+          <h2>AI 总结</h2>
+          <n-alert type="info" :bordered="false" class="live-summary-room-tip">
+            这里按当前房间号覆盖全局直播总结配置。留空则继续使用全局配置；导出开关和模型仍在 AI 设置中统一控制。
+          </n-alert>
+          <n-form-item>
+            <template #label>
+              <Tip
+                text="本房间提示词"
+                tip="只对当前房间号生效。为空时使用 AI 设置里的全局提示词或其他匹配规则。"
+              ></Tip>
+            </template>
+            <n-input
+              v-model:value="liveSummaryRoomConfig.prompt"
+              type="textarea"
+              placeholder="本房间使用的 AI 总结提示词，留空则使用全局"
+              :autosize="{ minRows: 3, maxRows: 8 }"
+            />
+          </n-form-item>
+          <n-form-item>
+            <template #label>
+              <Tip
+                text="飞书文档"
+                tip="当前房间导出到飞书时使用。追加模式填写文档 ID/链接；新建模式可填写文件夹 Token/链接。"
+              ></Tip>
+            </template>
+            <div class="live-summary-export-fields">
+              <n-input
+                v-model:value="liveSummaryRoomConfig.feishuDocumentId"
+                placeholder="飞书文档 ID/链接，留空使用全局"
+              />
+              <n-input
+                v-model:value="liveSummaryRoomConfig.feishuFolderToken"
+                placeholder="飞书文件夹 Token/链接，留空使用全局"
+              />
+            </div>
+          </n-form-item>
+          <n-form-item>
+            <template #label>
+              <Tip
+                text="Notion 页面"
+                tip="当前房间导出到 Notion 时使用。追加模式是目标页面；新建子页面模式是父页面。"
+              ></Tip>
+            </template>
+            <n-input
+              v-model:value="liveSummaryRoomConfig.notionPageId"
+              placeholder="Notion 页面 ID/链接，留空使用全局"
+            />
+          </n-form-item>
         </template>
       </n-form>
       <template #footer>
@@ -707,13 +756,24 @@ import { useConfirm } from "@renderer/hooks";
 import { defaultRecordConfig } from "@biliLive-tools/shared/enum.js";
 import { cloneDeep } from "lodash-es";
 
-import type { Recorder } from "@biliLive-tools/types";
+import type { AppConfig, Recorder } from "@biliLive-tools/types";
+
+type LiveSummaryPromptOverride = NonNullable<
+  AppConfig["ai"]["liveSummary"]["promptOverrides"]
+>[number];
+type FeishuStreamerOverride = NonNullable<
+  AppConfig["ai"]["liveSummary"]["exportTargets"]["feishu"]["streamerOverrides"]
+>[number];
+type NotionStreamerOverride = NonNullable<
+  AppConfig["ai"]["liveSummary"]["exportTargets"]["notion"]["streamerOverrides"]
+>[number];
 
 interface Props {
   id?: string;
 }
 const notice = useNotification();
-const { appConfig } = storeToRefs(useAppConfig());
+const appConfigStore = useAppConfig();
+const { appConfig } = storeToRefs(appConfigStore);
 const { userList } = storeToRefs(useUserInfoStore());
 
 const showModal = defineModel<boolean>("visible", { required: true, default: false });
@@ -750,6 +810,112 @@ const globalFieldsObj = ref<Record<NonNullable<Recorder["noGlobalFollowFields"]>
 
 const recordConfig = cloneDeep(defaultRecordConfig);
 const config = ref(recordConfig);
+const liveSummaryRoomConfig = ref({
+  prompt: "",
+  feishuDocumentId: "",
+  feishuFolderToken: "",
+  notionPageId: "",
+});
+
+const normalizeMatcherValue = (value?: string | number | null) => String(value ?? "").trim();
+
+const getRoomMatcher = () => ({
+  roomId: normalizeMatcherValue(config.value.channelId),
+  streamer: normalizeMatcherValue(owner.value || config.value.remarks),
+});
+
+const ensureLiveSummaryConfig = () => {
+  appConfig.value.ai.liveSummary.promptOverrides ||= [];
+  appConfig.value.ai.liveSummary.exportTargets.feishu.streamerOverrides ||= [];
+  appConfig.value.ai.liveSummary.exportTargets.notion.streamerOverrides ||= [];
+  return appConfig.value.ai.liveSummary;
+};
+
+const findRoomOverride = <T extends { roomId?: string }>(overrides: T[] | undefined, roomId: string) =>
+  overrides?.find((item) => normalizeMatcherValue(item.roomId) === roomId);
+
+const removeRoomOverride = <T extends { roomId?: string }>(overrides: T[] | undefined, roomId: string) =>
+  (overrides || []).filter((item) => normalizeMatcherValue(item.roomId) !== roomId);
+
+const loadLiveSummaryRoomConfig = () => {
+  const { roomId } = getRoomMatcher();
+  liveSummaryRoomConfig.value = {
+    prompt: "",
+    feishuDocumentId: "",
+    feishuFolderToken: "",
+    notionPageId: "",
+  };
+  if (!roomId) return;
+
+  const liveSummary = ensureLiveSummaryConfig();
+  const promptOverride = findRoomOverride(liveSummary.promptOverrides, roomId);
+  const feishuOverride = findRoomOverride(
+    liveSummary.exportTargets.feishu.streamerOverrides,
+    roomId,
+  );
+  const notionOverride = findRoomOverride(
+    liveSummary.exportTargets.notion.streamerOverrides,
+    roomId,
+  );
+
+  liveSummaryRoomConfig.value = {
+    prompt: promptOverride?.prompt || "",
+    feishuDocumentId: feishuOverride?.documentId || "",
+    feishuFolderToken: feishuOverride?.folderToken || "",
+    notionPageId: notionOverride?.pageId || "",
+  };
+};
+
+const saveLiveSummaryRoomConfig = async () => {
+  const { roomId, streamer } = getRoomMatcher();
+  if (!roomId) return;
+
+  const liveSummary = ensureLiveSummaryConfig();
+  const promptOverrides = removeRoomOverride(liveSummary.promptOverrides, roomId);
+  const feishuOverrides = removeRoomOverride(
+    liveSummary.exportTargets.feishu.streamerOverrides,
+    roomId,
+  );
+  const notionOverrides = removeRoomOverride(
+    liveSummary.exportTargets.notion.streamerOverrides,
+    roomId,
+  );
+
+  const prompt = liveSummaryRoomConfig.value.prompt.trim();
+  if (prompt) {
+    promptOverrides.push({
+      streamer,
+      roomId,
+      prompt,
+    } satisfies LiveSummaryPromptOverride);
+  }
+
+  const documentId = liveSummaryRoomConfig.value.feishuDocumentId.trim();
+  const folderToken = liveSummaryRoomConfig.value.feishuFolderToken.trim();
+  if (documentId || folderToken) {
+    feishuOverrides.push({
+      streamer,
+      roomId,
+      documentId,
+      folderToken,
+    } satisfies FeishuStreamerOverride);
+  }
+
+  const pageId = liveSummaryRoomConfig.value.notionPageId.trim();
+  if (pageId) {
+    notionOverrides.push({
+      streamer,
+      roomId,
+      pageId,
+    } satisfies NotionStreamerOverride);
+  }
+
+  const nextAi = cloneDeep(appConfig.value.ai);
+  nextAi.liveSummary.promptOverrides = promptOverrides;
+  nextAi.liveSummary.exportTargets.feishu.streamerOverrides = feishuOverrides;
+  nextAi.liveSummary.exportTargets.notion.streamerOverrides = notionOverrides;
+  await appConfigStore.set("ai", nextAi);
+};
 
 const confirmDialog = useConfirm();
 const confirm = async () => {
@@ -780,6 +946,7 @@ const confirm = async () => {
   } else {
     await recoderApi.add(config.value);
   }
+  await saveLiveSummaryRoomConfig();
   emits("confirm");
   showModal.value = false;
 };
@@ -816,6 +983,7 @@ const onChannelIdInputEnd = async () => {
   // 直接使用后端返回的完整配置
   config.value = res;
   owner.value = res.remarks || "";
+  loadLiveSummaryRoomConfig();
 };
 
 const initGlobalFields = () => {
@@ -856,6 +1024,7 @@ watch(showModal, async (val) => {
       await getRecordSetting();
     }
     initGlobalFields();
+    loadLiveSummaryRoomConfig();
   }
 });
 
@@ -992,6 +1161,17 @@ watch(
   }
 }
 
+.live-summary-room-tip {
+  margin-bottom: 12px;
+}
+
+.live-summary-export-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
 .card {
   :deep(.n-form-item-feedback-wrapper) {
     --n-feedback-height: 15px;
@@ -1000,5 +1180,11 @@ watch(
 h2 {
   margin: 0;
   margin-bottom: 4px;
+}
+
+@media (max-width: 720px) {
+  .live-summary-export-fields {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
