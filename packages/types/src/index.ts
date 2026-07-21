@@ -392,6 +392,13 @@ export interface LiveSummaryNotionStreamerOverride {
   pageId?: string;
 }
 
+export interface LiveSummaryYuqueStreamerOverride {
+  streamer?: string;
+  roomId?: string;
+  namespace?: string;
+  slug?: string;
+}
+
 export interface LiveSummaryPromptOverride {
   streamer?: string;
   roomId?: string;
@@ -857,6 +864,16 @@ export interface AppConfig {
           pageId: string;
           titleTemplate?: string;
           streamerOverrides?: LiveSummaryNotionStreamerOverride[];
+        };
+        yuque: {
+          enabled: boolean;
+          mode?: "append" | "create";
+          token: string;
+          namespace: string;
+          slug?: string;
+          baseUrl?: string;
+          titleTemplate?: string;
+          streamerOverrides?: LiveSummaryYuqueStreamerOverride[];
         };
       };
       /** @deprecated use exportTargets.feishu */

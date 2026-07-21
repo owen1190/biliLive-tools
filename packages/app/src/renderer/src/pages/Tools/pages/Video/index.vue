@@ -49,7 +49,7 @@
         />
 
         <div class="analysis-cloud-export">
-          <div class="analysis-cloud-export-title">飞书 / Notion 导出位置</div>
+          <div class="analysis-cloud-export-title">飞书 / Notion / 语雀导出位置</div>
           <div class="analysis-cloud-export-grid">
             <div class="analysis-cloud-export-target">
               <n-checkbox v-model:checked="analysisCloudExport.feishu.enabled">
@@ -95,6 +95,35 @@
                 v-model:value="analysisCloudExport.notion.pageId"
                 :disabled="!analysisCloudExport.notion.enabled"
                 placeholder="Notion 页面链接或 page_id"
+              />
+            </div>
+
+            <div class="analysis-cloud-export-target">
+              <n-checkbox v-model:checked="analysisCloudExport.yuque.enabled">
+                语雀文档
+              </n-checkbox>
+              <n-radio-group
+                v-model:value="analysisCloudExport.yuque.mode"
+                :disabled="!analysisCloudExport.yuque.enabled"
+              >
+                <n-space>
+                  <n-radio value="append">追加到已有文档</n-radio>
+                  <n-radio value="create">新建文档</n-radio>
+                </n-space>
+              </n-radio-group>
+              <n-input
+                v-model:value="analysisCloudExport.yuque.namespace"
+                :disabled="!analysisCloudExport.yuque.enabled"
+                placeholder="语雀知识库链接或 namespace，例如 foo/bar"
+              />
+              <n-input
+                v-model:value="analysisCloudExport.yuque.slug"
+                :disabled="!analysisCloudExport.yuque.enabled"
+                :placeholder="
+                  analysisCloudExport.yuque.mode === 'append'
+                    ? '语雀文档链接或 slug'
+                    : '文档 slug'
+                "
               />
             </div>
           </div>
@@ -388,6 +417,7 @@ const subData = ref<VideoAPI["SubList"]["Resp"][0]>({
     quality: "highest",
     danma: false,
     sendWebhook: false,
+    savePath: "",
   },
   name: "",
   subId: "",
@@ -512,6 +542,13 @@ const analysisCloudExport = reactive({
     mode: "create_child_page" as NonNullable<AnalysisCloudExportTargets["notion"]>["mode"],
     pageId: "",
   },
+  yuque: {
+    enabled: false,
+    mode: "create" as NonNullable<AnalysisCloudExportTargets["yuque"]>["mode"],
+    namespace: "",
+    slug: "",
+    baseUrl: "https://www.yuque.com/api/v2",
+  },
 });
 let analysisTimer: number | null = null;
 const ANALYSIS_OUTPUT_DIR_STORAGE_KEY = "douyin-video-analysis-output-dir";
@@ -523,7 +560,10 @@ let analysisOutputDirSaveTimer: number | null = null;
 
 const analysisOutput = computed(() => analysisTask.value?.output as AnalysisOutput | undefined);
 const hasAnalysisCloudExportTargets = computed(
-  () => analysisCloudExport.feishu.enabled || analysisCloudExport.notion.enabled,
+  () =>
+    analysisCloudExport.feishu.enabled ||
+    analysisCloudExport.notion.enabled ||
+    analysisCloudExport.yuque.enabled,
 );
 
 const ensureVideoConfig = () => {
@@ -579,6 +619,7 @@ onMounted(() => {
       const parsed = JSON.parse(storedCloudExport);
       Object.assign(analysisCloudExport.feishu, parsed.feishu || {});
       Object.assign(analysisCloudExport.notion, parsed.notion || {});
+      Object.assign(analysisCloudExport.yuque, parsed.yuque || {});
     } catch {
       localStorage.removeItem(ANALYSIS_CLOUD_EXPORT_STORAGE_KEY);
     }
@@ -688,6 +729,26 @@ const validateAnalysisCloudExportOptions = () => {
     return false;
   }
 
+  if (analysisCloudExport.yuque.enabled) {
+    if (!analysisCloudExport.yuque.namespace.trim()) {
+      notice.error({
+        title: "请填写语雀知识库链接或 namespace",
+        duration: 3000,
+      });
+      return false;
+    }
+    if (!analysisCloudExport.yuque.slug.trim()) {
+      notice.error({
+        title:
+          analysisCloudExport.yuque.mode === "append"
+            ? "请填写语雀文档链接或 slug"
+            : "请填写语雀文档 slug",
+        duration: 3000,
+      });
+      return false;
+    }
+  }
+
   return true;
 };
 
@@ -710,6 +771,16 @@ const buildAnalysisCloudExportTargets = ():
           enabled: true,
           mode: analysisCloudExport.notion.mode,
           pageId: analysisCloudExport.notion.pageId.trim(),
+          titleTemplate: "{title} - {time}",
+        }
+      : undefined,
+    yuque: analysisCloudExport.yuque.enabled
+      ? {
+          enabled: true,
+          mode: analysisCloudExport.yuque.mode,
+          namespace: analysisCloudExport.yuque.namespace.trim(),
+          slug: analysisCloudExport.yuque.slug.trim(),
+          baseUrl: analysisCloudExport.yuque.baseUrl.trim(),
           titleTemplate: "{title} - {time}",
         }
       : undefined,

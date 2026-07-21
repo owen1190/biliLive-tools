@@ -478,6 +478,120 @@
                     </template>
                   </n-dynamic-input>
                 </n-form-item>
+                <n-form-item>
+                  <template #label>
+                    <Tip
+                      tip="启用后，直播总结生成完成会写入语雀文档。追加模式会读取已有 Markdown 后写回；新建模式会在指定知识库中新建文档。需要语雀 API Token 具备文档读写权限。"
+                      text="导出到语雀"
+                    />
+                  </template>
+                  <n-switch v-model:value="config.ai.liveSummary.exportTargets.yuque.enabled" />
+                </n-form-item>
+                <n-form-item
+                  v-if="config.ai.liveSummary.exportTargets.yuque.enabled"
+                  label="导出方式"
+                >
+                  <n-select
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.mode"
+                    :options="yuqueExportModeOptions"
+                    style="width: 220px"
+                  />
+                </n-form-item>
+                <n-form-item
+                  v-if="config.ai.liveSummary.exportTargets.yuque.enabled"
+                  label="Token"
+                >
+                  <n-input
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.token"
+                    type="password"
+                    show-password-on="click"
+                    placeholder="请输入语雀 API Token"
+                  />
+                </n-form-item>
+                <n-form-item v-if="config.ai.liveSummary.exportTargets.yuque.enabled">
+                  <template #label>
+                    <Tip
+                      tip="知识库路径 namespace 通常是语雀链接中的 /用户名/知识库名，例如 https://www.yuque.com/foo/bar 对应 foo/bar。"
+                      text="知识库路径"
+                    />
+                  </template>
+                  <n-input
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.namespace"
+                    placeholder="例如：https://www.yuque.com/foo/bar 或 foo/bar"
+                  />
+                </n-form-item>
+                <n-form-item
+                  v-if="
+                    config.ai.liveSummary.exportTargets.yuque.enabled &&
+                    (config.ai.liveSummary.exportTargets.yuque.mode || 'append') === 'append'
+                  "
+                >
+                  <template #label>
+                    <Tip
+                      tip="可以填写语雀文档链接，也可以直接填写文档 slug。追加模式会读取该文档现有内容后追加写入。"
+                      text="文档 slug/链接"
+                    />
+                  </template>
+                  <n-input
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.slug"
+                    placeholder="例如：https://www.yuque.com/foo/bar/doc-slug 或 doc-slug"
+                  />
+                </n-form-item>
+                <n-form-item
+                  v-if="
+                    config.ai.liveSummary.exportTargets.yuque.enabled &&
+                    config.ai.liveSummary.exportTargets.yuque.mode === 'create'
+                  "
+                >
+                  <template #label>
+                    <Tip
+                      tip="新建模式下必填。语雀创建文档接口需要文档 slug。"
+                      text="文档 slug"
+                    />
+                  </template>
+                  <n-input
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.slug"
+                    placeholder="例如 live-summary-2026"
+                  />
+                </n-form-item>
+                <n-form-item
+                  v-if="
+                    config.ai.liveSummary.exportTargets.yuque.enabled &&
+                    config.ai.liveSummary.exportTargets.yuque.mode === 'create'
+                  "
+                >
+                  <template #label>
+                    <Tip
+                      tip="支持变量：{room}、{streamer}、{roomId}、{title}、{platform}、{time}。"
+                      text="文档标题模板"
+                    />
+                  </template>
+                  <n-input
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.titleTemplate"
+                    placeholder="{room} - {time}"
+                  />
+                </n-form-item>
+                <n-form-item v-if="config.ai.liveSummary.exportTargets.yuque.enabled">
+                  <template #label>
+                    <Tip
+                      tip="可为特定主播或房间号覆盖默认语雀知识库和文档 slug。优先匹配房间号；未命中时匹配只填写主播名的规则。"
+                      text="按主播覆盖路径"
+                    />
+                  </template>
+                  <n-dynamic-input
+                    v-model:value="config.ai.liveSummary.exportTargets.yuque.streamerOverrides"
+                    :on-create="createYuqueStreamerOverride"
+                  >
+                    <template #default="{ value }">
+                      <div class="streamer-override-row">
+                        <n-input v-model:value="value.streamer" placeholder="主播名" />
+                        <n-input v-model:value="value.roomId" placeholder="房间号（优先）" />
+                        <n-input v-model:value="value.namespace" placeholder="语雀知识库路径" />
+                        <n-input v-model:value="value.slug" placeholder="语雀文档 slug/链接" />
+                      </div>
+                    </template>
+                  </n-dynamic-input>
+                </n-form-item>
               </n-form>
             </n-collapse-item>
           </n-collapse>
@@ -608,6 +722,10 @@ type FeishuStreamerOverride = NonNullable<
 type NotionStreamerOverride = NonNullable<
   AppConfig["ai"]["liveSummary"]["exportTargets"]["notion"]["streamerOverrides"]
 >[number];
+type YuqueExportConfig = NonNullable<
+  AppConfig["ai"]["liveSummary"]["exportTargets"]["yuque"]
+>;
+type YuqueStreamerOverride = NonNullable<YuqueExportConfig["streamerOverrides"]>[number];
 type LiveSummaryPromptOverride = NonNullable<
   AppConfig["ai"]["liveSummary"]["promptOverrides"]
 >[number];
@@ -644,6 +762,16 @@ const config = defineModel<AppConfig>("data", {
             titleTemplate: "{room} - {time}",
             streamerOverrides: [],
           },
+          yuque: {
+            enabled: false,
+            mode: "append",
+            token: "",
+            namespace: "",
+            slug: "",
+            baseUrl: "https://www.yuque.com/api/v2",
+            titleTemplate: "{room} - {time}",
+            streamerOverrides: [],
+          },
         },
       },
     },
@@ -658,6 +786,17 @@ watchEffect(() => {
   const exportTargets = config.value.ai.liveSummary.exportTargets;
   exportTargets.feishu.streamerOverrides ||= [];
   exportTargets.notion.streamerOverrides ||= [];
+  exportTargets.yuque ||= {
+    enabled: false,
+    mode: "append",
+    token: "",
+    namespace: "",
+    slug: "",
+    baseUrl: "https://www.yuque.com/api/v2",
+    titleTemplate: "{room} - {time}",
+    streamerOverrides: [],
+  };
+  exportTargets.yuque.streamerOverrides ||= [];
 });
 
 const createLiveSummaryPromptOverride = (): LiveSummaryPromptOverride => ({
@@ -679,6 +818,13 @@ const createNotionStreamerOverride = (): NotionStreamerOverride => ({
   pageId: "",
 });
 
+const createYuqueStreamerOverride = (): YuqueStreamerOverride => ({
+  streamer: "",
+  roomId: "",
+  namespace: "",
+  slug: "",
+});
+
 const feishuExportModeOptions = [
   {
     label: "追加到已有文档",
@@ -698,6 +844,17 @@ const notionExportModeOptions = [
   {
     label: "新建子页面",
     value: "create_child_page",
+  },
+];
+
+const yuqueExportModeOptions = [
+  {
+    label: "追加到已有文档",
+    value: "append",
+  },
+  {
+    label: "新建文档",
+    value: "create",
   },
 ];
 

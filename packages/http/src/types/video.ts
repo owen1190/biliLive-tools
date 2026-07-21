@@ -59,6 +59,14 @@ export type VideoAPI = {
           pageId?: string;
           titleTemplate?: string;
         };
+        yuque?: {
+          enabled: boolean;
+          mode?: "append" | "create";
+          namespace?: string;
+          slug?: string;
+          baseUrl?: string;
+          titleTemplate?: string;
+        };
       };
     };
     Resp: {

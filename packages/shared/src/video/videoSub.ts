@@ -15,6 +15,28 @@ import { sleep } from "../utils/index.js";
 
 import type { VideoSubItem } from "../db/model/videoSub.js";
 
+function getSubSavePath(item: VideoSubItem) {
+  const configuredPath = item.options.savePath?.trim();
+  if (configuredPath) return configuredPath;
+
+  const globalSavePath = appConfig?.data?.video?.subSavePath?.trim();
+  if (!globalSavePath) return "";
+
+  const folderName = filenamify(item.name || item.roomId || item.subId, { replacement: "_" });
+  return path.join(globalSavePath, folderName);
+}
+
+async function getVideoOutputPath(item: VideoSubItem, rawName: string) {
+  const savePath = getSubSavePath(item);
+  if (!savePath) {
+    throw new Error("请先设置下载路径");
+  }
+
+  await fs.ensureDir(savePath);
+  const name = filenamify(rawName, { replacement: "_" });
+  return path.join(savePath, `${name}.mp4`);
+}
+
 /**
  * 保存订阅
  */
@@ -104,8 +126,7 @@ export async function parse(url: string): Promise<Parameters<typeof videoSubServ
 async function downloadDouyuVideo(videoId: string, item: VideoSubItem) {
   const videoData = await video.parseVideo(`https://v.douyu.com/show/${videoId}`);
   const rawName = videoData.ROOM.name;
-  const name = filenamify(rawName, { replacement: "_" });
-  let output = path.join(appConfig.data.video.subSavePath, `${name}.mp4`);
+  const output = await getVideoOutputPath(item, rawName);
 
   const task = await douyu.download(output, videoData.decodeData, {
     danmu: item.options.danma ? "xml" : "none",
@@ -165,8 +186,7 @@ async function downloadHuyaVideo(videoId: string, item: VideoSubItem) {
   // 解析视频信息
   const videoData = await huya.parseVideo(videoId);
   const rawName = videoData.moment.title;
-  const name = filenamify(rawName, { replacement: "_" });
-  const output = path.join(appConfig.data.video.subSavePath, `${name}.mp4`);
+  const output = await getVideoOutputPath(item, rawName);
 
   // 获取最高(或指定)清晰度的视频链接
   const definitions = videoData.moment.videoInfo.definitions;
@@ -328,7 +348,7 @@ export async function check(id: number) {
   if (!item) {
     throw new Error("不存在的订阅");
   }
-  if (!appConfig?.data?.video?.subSavePath) {
+  if (!getSubSavePath(item)) {
     throw new Error("请先设置下载路径");
   }
   await runTask(item);
@@ -337,16 +357,13 @@ export async function check(id: number) {
 export async function checkAll() {
   const items = videoSubService.list();
   const needCheckItems = items.filter((item) => item.enable);
-  if (needCheckItems.length !== 0) {
-    const savePath = appConfig?.data?.video?.subSavePath;
-    if (!savePath) {
-      throw new Error("请先设置下载路径");
-    }
-    await fs.ensureDir(savePath);
-  }
-
   for (const item of needCheckItems) {
     try {
+      const savePath = getSubSavePath(item);
+      if (!savePath) {
+        throw new Error("请先设置下载路径");
+      }
+      await fs.ensureDir(savePath);
       await runTask(item);
     } catch (error) {
       logger.error(`订阅${item.name}失败`, error);

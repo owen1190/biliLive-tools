@@ -36,6 +36,18 @@
           <n-switch v-model:value="data.options.sendWebhook" />
         </n-form-item>
 
+        <n-form-item>
+          <template #label>
+            <span class="inline-flex">保存目录</span>
+          </template>
+          <div class="path">
+            <n-input v-model:value="data.options.savePath" placeholder="请选择该主播订阅保存目录" />
+            <n-icon style="margin-left: 10px" size="26" class="pointer" @click="selectFolder">
+              <FolderOpenOutline />
+            </n-icon>
+          </div>
+        </n-form-item>
+
         <n-form-item v-if="data.platform === 'douyu'">
           <template #label>
             <span class="inline-flex">弹幕</span>
@@ -54,7 +66,11 @@
 </template>
 
 <script setup lang="ts">
+import { FolderOpenOutline } from "@vicons/ionicons5";
 import { videoApi } from "@renderer/apis";
+import { useAppConfig } from "@renderer/stores";
+import { sanitizeFileName } from "@renderer/utils";
+import { showDirectoryDialog } from "@renderer/utils/fileSystem";
 
 import type { VideoAPI } from "@biliLive-tools/http/types/video.js";
 
@@ -73,10 +89,40 @@ const emits = defineEmits<{
 }>();
 
 const notice = useNotice();
+const { appConfig } = storeToRefs(useAppConfig());
 const type = computed(() => {
   return props.data.id ? "update" : "add";
 });
+
+const getDefaultSavePath = () => {
+  const basePath = appConfig.value.video?.subSavePath?.trim();
+  if (!basePath) return "";
+
+  const folderName = sanitizeFileName(props.data.name || props.data.roomId || props.data.subId);
+  return folderName ? window.path.join(basePath, folderName) : basePath;
+};
+
+const ensureSavePath = () => {
+  props.data.options.savePath ||= getDefaultSavePath();
+};
+
+watch(showModal, (visible) => {
+  if (visible) {
+    ensureSavePath();
+  }
+});
+
+const selectFolder = async () => {
+  const dir = await showDirectoryDialog({
+    defaultPath: props.data.options.savePath || getDefaultSavePath(),
+  });
+  if (!dir) return;
+
+  props.data.options.savePath = dir;
+};
+
 const confirm = async () => {
+  ensureSavePath();
   if (type.value === "add") {
     await videoApi.addSub(props.data);
     notice.success("订阅成功");

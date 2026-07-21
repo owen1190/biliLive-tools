@@ -3,6 +3,12 @@ import type { AppConfig } from "@biliLive-tools/types";
 import { extractFeishuDocumentId, extractFeishuFolderToken, FeishuDocClient } from "./feishu.js";
 import { findStreamerOverride } from "./liveSummaryConfig.js";
 import { extractNotionPageId, NotionClient } from "./notion.js";
+import {
+  buildYuqueDocumentUrl,
+  extractYuqueDocSlug,
+  extractYuqueNamespace,
+  YuqueClient,
+} from "./yuque.js";
 import logger from "../utils/log.js";
 
 export interface SummaryExportContext {
@@ -27,6 +33,14 @@ export type SummaryExportResult =
       pageId: string;
       url: string;
       mode: "append" | "create_child_page";
+    }
+  | {
+      target: "yuque";
+      name: "语雀文档";
+      namespace: string;
+      slug: string;
+      url: string;
+      mode: "append" | "create";
     };
 
 export class SummaryExportError extends Error {
@@ -44,6 +58,9 @@ type LiveSummaryConfig = AppConfig["ai"]["liveSummary"] & {
 };
 type FeishuExportConfig = AppConfig["ai"]["liveSummary"]["exportTargets"]["feishu"];
 type NotionExportConfig = AppConfig["ai"]["liveSummary"]["exportTargets"]["notion"];
+type YuqueExportConfig = NonNullable<
+  AppConfig["ai"]["liveSummary"]["exportTargets"]["yuque"]
+>;
 
 export function buildSummaryExportMarkdown(summary: string, input: SummaryExportContext) {
   const meta = [
@@ -108,6 +125,8 @@ export function buildNotionPageUrl(pageId: string) {
   return compact ? `https://www.notion.so/${compact}` : "";
 }
 
+export { buildYuqueDocumentUrl };
+
 export function buildLiveSummaryNotification(
   input: SummaryExportContext,
   results: SummaryExportResult[],
@@ -156,11 +175,23 @@ function resolveNotionConfig(config: NotionExportConfig | undefined, input: Summ
   };
 }
 
+function resolveYuqueConfig(config: YuqueExportConfig | undefined, input: SummaryExportContext) {
+  if (!config) return undefined;
+  const override = findStreamerOverride(config.streamerOverrides, input);
+  if (!override) return config;
+  return {
+    ...config,
+    namespace: override.namespace ?? config.namespace,
+    slug: override.slug ?? config.slug,
+  };
+}
+
 export function getEnabledSummaryExportTargetNames(config: LiveSummaryConfig) {
   const names: string[] = [];
   const feishuConfig = getFeishuConfig(config);
   if (feishuConfig?.enabled) names.push("飞书文档");
   if (config.exportTargets?.notion?.enabled) names.push("Notion");
+  if (config.exportTargets?.yuque?.enabled) names.push("语雀文档");
   return names;
 }
 
@@ -174,6 +205,7 @@ export async function exportSummaryToTargets(
   const results: SummaryExportResult[] = [];
   const feishuConfig = resolveFeishuConfig(getFeishuConfig(config), input);
   const notionConfig = resolveNotionConfig(config.exportTargets?.notion, input);
+  const yuqueConfig = resolveYuqueConfig(config.exportTargets?.yuque, input);
 
   if (feishuConfig?.enabled) {
     const documentId = extractFeishuDocumentId(feishuConfig.documentId);
@@ -295,6 +327,71 @@ export async function exportSummaryToTargets(
     } catch (error) {
       logger.error("导出直播总结到 Notion 失败", error);
       errors.push(`Notion：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (yuqueConfig?.enabled) {
+    const namespace = extractYuqueNamespace(yuqueConfig.namespace);
+    const slug = extractYuqueDocSlug(yuqueConfig.slug || "");
+    const mode = yuqueConfig.mode || "append";
+    const exportTitle = buildSummaryExportTitle(input, yuqueConfig.titleTemplate);
+    logger.info("开始导出直播总结到语雀文档", {
+      ...input,
+      namespace,
+      slug,
+      mode,
+      exportTitle,
+      markdownLength: markdown.length,
+    });
+    try {
+      if (!yuqueConfig.token || !namespace) {
+        throw new Error("请先完整配置语雀 Token 和知识库路径 namespace");
+      }
+      const yuqueClient = new YuqueClient({
+        token: yuqueConfig.token,
+        namespace,
+        slug: mode === "append" ? slug : undefined,
+        baseUrl: yuqueConfig.baseUrl,
+      });
+      if (mode === "create") {
+        const createdSlug = await yuqueClient.createDocument({
+          title: exportTitle,
+          markdown,
+          slug,
+        });
+        results.push({
+          target: "yuque",
+          name: "语雀文档",
+          namespace,
+          slug: createdSlug,
+          url: buildYuqueDocumentUrl(namespace, createdSlug),
+          mode,
+        });
+      } else {
+        if (!slug) {
+          throw new Error("请先配置语雀文档 slug/链接");
+        }
+        const updatedSlug = await yuqueClient.appendMarkdown(markdown);
+        results.push({
+          target: "yuque",
+          name: "语雀文档",
+          namespace,
+          slug: updatedSlug,
+          url: buildYuqueDocumentUrl(namespace, updatedSlug),
+          mode,
+        });
+      }
+      logger.info("导出直播总结到语雀文档完成", {
+        ...input,
+        namespace,
+        slug,
+        mode,
+        exportTitle,
+        markdownLength: markdown.length,
+      });
+    } catch (error) {
+      logger.error("导出直播总结到语雀文档失败", error);
+      errors.push(`语雀文档：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

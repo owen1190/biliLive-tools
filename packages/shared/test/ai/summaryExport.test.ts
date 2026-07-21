@@ -36,6 +36,7 @@ import {
   buildNotionPageUrl,
   buildSummaryExportMarkdown,
   buildSummaryExportTitle,
+  buildYuqueDocumentUrl,
   getEnabledSummaryExportTargetNames,
 } from "../../src/ai/summaryExport.js";
 
@@ -75,6 +76,9 @@ describe("summary export helpers", () => {
     expect(buildFeishuDocumentUrl("doccnABC123")).toBe("https://feishu.cn/docx/doccnABC123");
     expect(buildNotionPageUrl("01234567-89ab-cdef-0123-456789abcdef")).toBe(
       "https://www.notion.so/0123456789abcdef0123456789abcdef",
+    );
+    expect(buildYuqueDocumentUrl("foo/bar", "doc-slug")).toBe(
+      "https://www.yuque.com/foo/bar/doc-slug",
     );
   });
 
@@ -238,6 +242,163 @@ describe("summary export helpers", () => {
         mode: "append",
       },
     ]);
+  });
+
+  it("exports summary to yuque document", async () => {
+    const { exportSummaryToTargets } = await import("../../src/ai/summaryExport.js");
+
+    axiosMocks.client.request.mockResolvedValue({
+      data: {
+        data: {
+          slug: "created-doc",
+        },
+      },
+    });
+
+    await expect(
+      exportSummaryToTargets(
+        "总结内容",
+        { title: "直播标题" },
+        {
+          enabled: true,
+          prompt: "",
+          maxInputLength: 24000,
+          saveTranscript: true,
+          exportTargets: {
+            feishu: {
+              enabled: false,
+              mode: "append",
+              appId: "",
+              appSecret: "",
+              documentId: "",
+            },
+            notion: {
+              enabled: false,
+              mode: "append",
+              token: "",
+              pageId: "",
+            },
+            yuque: {
+              enabled: true,
+              mode: "create",
+              token: "yuque-token",
+              namespace: "foo/bar",
+              slug: "created-doc",
+              titleTemplate: "{title} - {time}",
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual([
+      {
+        target: "yuque",
+        name: "语雀文档",
+        namespace: "foo/bar",
+        slug: "created-doc",
+        url: "https://www.yuque.com/foo/bar/created-doc",
+        mode: "create",
+      },
+    ]);
+
+    expect(axiosMocks.client.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "post",
+        url: "/repos/foo/bar/docs",
+        data: expect.objectContaining({
+          body: expect.stringContaining("总结内容"),
+          format: "markdown",
+          slug: "created-doc",
+        }),
+      }),
+    );
+  });
+
+  it("appends summary to yuque document by updating returned document id", async () => {
+    const { exportSummaryToTargets } = await import("../../src/ai/summaryExport.js");
+
+    axiosMocks.client.request
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            id: 123,
+            title: "已有文档",
+            slug: "doc-slug",
+            body: "# 已有内容",
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            slug: "doc-slug",
+          },
+        },
+      });
+
+    await expect(
+      exportSummaryToTargets(
+        "总结内容",
+        { title: "直播标题" },
+        {
+          enabled: true,
+          prompt: "",
+          maxInputLength: 24000,
+          saveTranscript: true,
+          exportTargets: {
+            feishu: {
+              enabled: false,
+              mode: "append",
+              appId: "",
+              appSecret: "",
+              documentId: "",
+            },
+            notion: {
+              enabled: false,
+              mode: "append",
+              token: "",
+              pageId: "",
+            },
+            yuque: {
+              enabled: true,
+              mode: "append",
+              token: "yuque-token",
+              namespace: "foo/bar",
+              slug: "doc-slug",
+              titleTemplate: "{title} - {time}",
+            },
+          },
+        },
+      ),
+    ).resolves.toEqual([
+      {
+        target: "yuque",
+        name: "语雀文档",
+        namespace: "foo/bar",
+        slug: "doc-slug",
+        url: "https://www.yuque.com/foo/bar/doc-slug",
+        mode: "append",
+      },
+    ]);
+
+    expect(axiosMocks.client.request).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: "get",
+        url: "/repos/foo/bar/docs/doc-slug",
+        params: { raw: 1 },
+      }),
+    );
+    expect(axiosMocks.client.request).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "put",
+        url: "/repos/foo/bar/docs/123",
+        data: expect.objectContaining({
+          body: expect.stringContaining("# 已有内容\n\n---\n\n# 直播标题"),
+          title: "已有文档",
+        }),
+      }),
+    );
   });
 
   it("keeps successful export links on partial target failure", async () => {

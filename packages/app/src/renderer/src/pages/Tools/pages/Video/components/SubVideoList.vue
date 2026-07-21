@@ -16,6 +16,9 @@
             >{{ item.roomId }}</a
           >
         </div>
+        <div v-if="item.options.savePath" class="save-path" :title="item.options.savePath">
+          保存目录：{{ item.options.savePath }}
+        </div>
       </div>
       <div class="card-action">
         <TextButton
@@ -127,6 +130,16 @@ const hanleChannelURL = (platform: string, roomId: string) => {
       align-items: center;
       gap: 5px;
     }
+
+    .save-path {
+      margin-top: 4px;
+      max-width: 260px;
+      color: #666666;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 
   .card-action {
@@ -153,6 +166,10 @@ const hanleChannelURL = (platform: string, roomId: string) => {
     .card-content {
       .name {
         color: #e0e0e0;
+      }
+
+      .save-path {
+        color: #aaaaaa;
       }
     }
 

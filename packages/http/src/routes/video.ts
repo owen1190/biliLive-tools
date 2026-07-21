@@ -100,7 +100,7 @@ function buildDouyinAnalysisExportConfig(
   config: AppConfig["ai"]["liveSummary"],
   exportTargets?: VideoAPI["exportDouyinVideoAnalysis"]["Args"]["exportTargets"],
 ) {
-  if (!exportTargets?.feishu && !exportTargets?.notion) return config;
+  if (!exportTargets?.feishu && !exportTargets?.notion && !exportTargets?.yuque) return config;
 
   return {
     ...config,
@@ -133,6 +133,39 @@ function buildDouyinAnalysisExportConfig(
           }
         : {
             ...config.exportTargets.notion,
+            enabled: false,
+          },
+      yuque: exportTargets.yuque
+        ? {
+            ...(config.exportTargets.yuque || {
+              token: "",
+              namespace: "",
+              slug: "",
+              baseUrl: "https://www.yuque.com/api/v2",
+              titleTemplate: "{room} - {time}",
+              streamerOverrides: [],
+            }),
+            enabled: exportTargets.yuque.enabled,
+            mode: exportTargets.yuque.mode || config.exportTargets.yuque?.mode || "append",
+            namespace: exportTargets.yuque.namespace?.trim() || "",
+            slug: exportTargets.yuque.slug?.trim() || "",
+            baseUrl:
+              exportTargets.yuque.baseUrl?.trim() ||
+              config.exportTargets.yuque?.baseUrl ||
+              "https://www.yuque.com/api/v2",
+            titleTemplate:
+              exportTargets.yuque.titleTemplate?.trim() ||
+              config.exportTargets.yuque?.titleTemplate,
+          }
+        : {
+            ...(config.exportTargets.yuque || {
+              token: "",
+              namespace: "",
+              slug: "",
+              baseUrl: "https://www.yuque.com/api/v2",
+              titleTemplate: "{room} - {time}",
+              streamerOverrides: [],
+            }),
             enabled: false,
           },
     },

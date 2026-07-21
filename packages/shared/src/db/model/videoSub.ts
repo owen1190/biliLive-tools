@@ -25,6 +25,7 @@ interface Options {
   danma: boolean;
   sendWebhook: boolean;
   quality: string;
+  savePath?: string;
 }
 
 export interface VideoSubItem extends Omit<VideoSub, "options" | "enable"> {
