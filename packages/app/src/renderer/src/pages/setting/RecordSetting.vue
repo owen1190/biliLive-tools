@@ -24,6 +24,22 @@
           </n-form-item>
           <n-form-item>
             <template #label>
+              <Tip
+                text="录播文件保留天数"
+                tip="0表示不自动清理。程序每6小时检查一次，按文件修改时间清理超过保留天数的视频；正在录制或上传中的文件会跳过。"
+              ></Tip>
+            </template>
+            <n-input-number
+              v-model:value="config.recorder.retentionDays"
+              min="0"
+              step="1"
+              style="width: 220px"
+            >
+              <template #suffix>天（0=不清理）</template>
+            </n-input-number>
+          </n-form-item>
+          <n-form-item>
+            <template #label>
               <Tip :tip="titleTip" text="文件命名规则"></Tip>
             </template>
             <n-input

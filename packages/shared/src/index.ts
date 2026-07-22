@@ -1,4 +1,5 @@
 import dns from "node:dns";
+import path from "node:path";
 import fs from "fs-extra";
 import { createContainer, asValue, asClass } from "awilix";
 import { default as checkDiskSpace } from "check-disk-space";
@@ -14,6 +15,7 @@ import BiliCheckQueue from "./task/BiliCheckQueue.js";
 import { createInterval as checkSubLoop } from "./video/videoSub.js";
 import { check as checkVirtualRecordLoop } from "./task/virtualRecord.js";
 import { createRecorderManager } from "./recorder/index.js";
+import { cleanupOldRecordings } from "./recorder/cleanup.js";
 import { sendNotify } from "./notify.js";
 import { initDB } from "./db/index.js";
 import { statisticsService } from "./db/index.js";
@@ -78,6 +80,7 @@ const init = async (config: GlobalConfig) => {
     commentQueue.checkLoop();
     checkAccountLoop();
     checkDiskSpaceLoop();
+    checkRecordingCleanupLoop(recorderManager);
     checkSubLoop();
     checkVirtualRecordLoop();
   } catch (error) {
@@ -89,6 +92,54 @@ const init = async (config: GlobalConfig) => {
     create: { stat_key: "start_time", value: Date.now().toString() },
   });
   return container;
+};
+
+const checkRecordingCleanupLoop = (
+  recorderManager: Awaited<ReturnType<typeof createRecorderManager>>,
+) => {
+  const runCleanup = async () => {
+    const config = appConfig.getAll();
+    const retentionDays = config?.recorder?.retentionDays ?? 0;
+    if (retentionDays <= 0) return;
+
+    const protectedPaths = [
+      ...recorderManager.manager.recorders.flatMap((recorder) =>
+        recorder.recordHandle?.savePath ? [recorder.recordHandle.savePath] : [],
+      ),
+      ...taskQueue
+        .filter({ type: "sync" })
+        .filter((task) => ["pending", "running", "paused"].includes(task.status))
+        .flatMap((task) => (task.extra?.input ? [task.extra.input] : [])),
+    ];
+    const rootPaths = [config.recorder.savePath, config.webhook?.recoderFolder]
+      .filter((rootPath): rootPath is string => Boolean(rootPath?.trim()))
+      .map((rootPath) => path.resolve(rootPath))
+      .filter((rootPath, index, paths) => paths.indexOf(rootPath) === index);
+
+    for (const rootPath of rootPaths) {
+      const result = await cleanupOldRecordings({
+        rootPath,
+        retentionDays,
+        protectedPaths,
+      });
+      if (result.deleted || result.errors.length) {
+        logger.info("录播文件自动清理完成", {
+          rootPath,
+          retentionDays,
+          scanned: result.scanned,
+          deleted: result.deleted,
+          skippedProtected: result.skippedProtected,
+          errors: result.errors.length,
+        });
+      }
+    }
+  };
+
+  void runCleanup().catch((error) => logger.error("录播文件自动清理失败", error));
+  setInterval(
+    () => void runCleanup().catch((error) => logger.error("录播文件自动清理失败", error)),
+    1000 * 60 * 60 * 6,
+  );
 };
 
 // 迁移数据

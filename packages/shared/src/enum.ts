@@ -454,6 +454,7 @@ export const APP_DEFAULT_CONFIG: AppConfig = {
   recorder: {
     savePath: "",
     nameRule: "{platform}/{owner}/{year}-{month}-{date} {hour}-{min}-{sec}-{ms} {title}",
+    retentionDays: 0,
     autoRecord: true,
     quality: "highest",
     line: undefined,

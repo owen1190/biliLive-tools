@@ -482,6 +482,8 @@ export interface GlobalRecorder {
   savePath: string;
   /** 命名规则 */
   nameRule: string;
+  /** 录播文件保留天数，0表示不自动清理 */
+  retentionDays: number;
   /** 自动录制 */
   autoRecord: boolean;
   /** 检查间隔 */
