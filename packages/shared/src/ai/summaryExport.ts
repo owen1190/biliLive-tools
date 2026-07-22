@@ -13,6 +13,7 @@ import logger from "../utils/log.js";
 
 export interface SummaryExportContext {
   title?: string;
+  summaryMode?: "record" | "session";
   streamer?: string;
   roomId?: string;
   platform?: string;
@@ -113,7 +114,11 @@ export function buildSummaryExportTitle(input: SummaryExportContext, template?: 
         (_, key: string) => variables[key] || "",
       )
     : `${room} - ${time}`;
-  return cleanExportTitle(raw) || `直播总结 - ${time}`;
+  const title = cleanExportTitle(raw) || `直播总结 - ${time}`;
+  if (input.summaryMode === "session" && !title.includes("整场")) {
+    return `${title}（整场）`;
+  }
+  return title;
 }
 
 export function buildFeishuDocumentUrl(documentId: string) {

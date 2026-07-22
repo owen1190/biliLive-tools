@@ -59,9 +59,11 @@ export async function exportExistingLiveSummaryWithDeps(
     throw new Error("请先在 AI 配置中启用飞书或 Notion 导出目标");
   }
 
+  const summaryMode = isSessionSummary(record.ai_summary) ? "session" : "record";
   const input: SummaryExportContext = {
+    summaryMode,
     title: formatLiveSummaryTitle(record.title, {
-      mode: isSessionSummary(record.ai_summary) ? "session" : "record",
+      mode: summaryMode,
     }),
     streamer: record.streamer?.name,
     roomId: record.streamer?.room_id,

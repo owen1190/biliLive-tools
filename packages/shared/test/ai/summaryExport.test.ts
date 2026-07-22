@@ -72,6 +72,33 @@ describe("summary export helpers", () => {
     ).toBe("主播 - 2026-06-09 13:30");
   });
 
+  it("adds the full-session marker to exported document titles", () => {
+    expect(
+      buildSummaryExportTitle(
+        {
+          summaryMode: "session",
+          title: "直播标题（整场）",
+          streamer: "主播",
+          roomId: "123",
+          recordStartTime: new Date("2026-06-09T13:30:00+08:00").getTime(),
+        },
+        "",
+      ),
+    ).toBe("主播 - 2026-06-09 13:30（整场）");
+
+    expect(
+      buildSummaryExportTitle(
+        {
+          summaryMode: "session",
+          title: "直播标题（整场）",
+          streamer: "主播",
+          recordStartTime: new Date("2026-06-09T13:30:00+08:00").getTime(),
+        },
+        "{title} - {time}",
+      ),
+    ).toBe("直播标题（整场） - 2026-06-09 13:30");
+  });
+
   it("builds document links for notification content", () => {
     expect(buildFeishuDocumentUrl("doccnABC123")).toBe("https://feishu.cn/docx/doccnABC123");
     expect(buildNotionPageUrl("01234567-89ab-cdef-0123-456789abcdef")).toBe(
