@@ -4,7 +4,13 @@ import type { LiveHistory } from "../db/model/recordHistory.js";
 
 export type LiveSummarySessionClip = Pick<
   LiveHistory,
-  "id" | "streamer_id" | "live_id" | "record_start_time" | "title" | "video_file"
+  | "id"
+  | "streamer_id"
+  | "live_id"
+  | "record_start_time"
+  | "title"
+  | "video_file"
+  | "ai_transcript_file"
 >;
 
 export interface LiveSummarySessionTranscriptPart {
@@ -24,6 +30,20 @@ function hasVideoFile(clip: LiveSummarySessionClip): clip is LiveSummarySessionC
   return Boolean(clip.video_file?.trim());
 }
 
+function hasTranscriptFile(
+  clip: LiveSummarySessionClip,
+): clip is LiveSummarySessionClip & { ai_transcript_file: string } {
+  return Boolean(clip.ai_transcript_file?.trim());
+}
+
+export function hasLiveSummarySource(clip: LiveSummarySessionClip) {
+  return hasVideoFile(clip) || hasTranscriptFile(clip);
+}
+
+export function isSessionTranscriptFile(filePath?: string) {
+  return Boolean(filePath?.endsWith(".session.transcript.txt"));
+}
+
 function sortByRecordStartTime(a: LiveSummarySessionClip, b: LiveSummarySessionClip) {
   return (a.record_start_time || 0) - (b.record_start_time || 0);
 }
@@ -33,16 +53,16 @@ export function resolveLiveSummarySessionClips(
   sessionCandidates: LiveSummarySessionClip[],
 ) {
   if (!target.live_id) {
-    return hasVideoFile(target) ? [target] : [];
+    return hasLiveSummarySource(target) ? [target] : [];
   }
 
   const clips = sessionCandidates
     .filter((clip) => clip.streamer_id === target.streamer_id)
     .filter((clip) => clip.live_id === target.live_id)
-    .filter(hasVideoFile)
+    .filter(hasLiveSummarySource)
     .sort(sortByRecordStartTime);
 
-  return clips.length ? clips : hasVideoFile(target) ? [target] : [];
+  return clips.length ? clips : hasLiveSummarySource(target) ? [target] : [];
 }
 
 function formatRecordStartTime(time?: number) {
@@ -53,7 +73,8 @@ function formatRecordStartTime(time?: number) {
 export function buildSessionTranscript(parts: LiveSummarySessionTranscriptPart[]) {
   return parts
     .map((part, index) => {
-      const fileName = part.clip.video_file ? path.basename(part.clip.video_file) : `record-${part.clip.id}`;
+      const sourceFile = part.clip.video_file || part.clip.ai_transcript_file;
+      const fileName = sourceFile ? path.basename(sourceFile) : `record-${part.clip.id}`;
       const startedAt = formatRecordStartTime(part.clip.record_start_time);
       const header = [
         `===== 片段 ${index + 1}/${parts.length}: ${fileName} =====`,

@@ -24,6 +24,7 @@ import { exportExistingLiveSummaryWithDeps } from "./liveSummaryExport.js";
 import {
   buildSessionTranscript,
   formatLiveSummaryTitle,
+  isSessionTranscriptFile,
   resolveLiveSummarySessionClips,
   type LiveSummarySessionClip,
   type LiveSummarySessionTranscriptPart,
@@ -31,7 +32,8 @@ import {
 
 export interface LiveSummaryTaskOptions {
   recordId: number;
-  videoFile: string;
+  videoFile?: string;
+  transcriptFile?: string;
   summaryMode?: "record" | "session";
   customPrompt?: string;
   title?: string;
@@ -159,6 +161,18 @@ async function resolveExistingVideoFile(videoFile: string) {
   return null;
 }
 
+async function resolveExistingTranscriptFile(transcriptFile?: string) {
+  if (!transcriptFile || !(await fs.pathExists(transcriptFile))) return null;
+  return transcriptFile;
+}
+
+function getTranscriptOutputBase(filePath: string) {
+  return path.basename(filePath)
+    .replace(/\.session\.transcript\.txt$/i, "")
+    .replace(/\.transcript\.txt$/i, "")
+    .replace(/\.[^.]+$/, "");
+}
+
 async function createSummary(input: {
   transcript: string;
   title?: string;
@@ -245,7 +259,8 @@ export class LiveSummaryTask extends AbstractTask {
   constructor(options: LiveSummaryTaskOptions) {
     super();
     this.options = options;
-    this.name = `${options.summaryMode === "session" ? "整场直播总结" : "直播总结"}: ${path.basename(options.videoFile)}`;
+    const sourceFile = options.videoFile || options.transcriptFile || `record-${options.recordId}`;
+    this.name = `${options.summaryMode === "session" ? "整场直播总结" : "直播总结"}: ${path.basename(sourceFile)}`;
     this.action = ["kill"];
     this.extra = {
       recordId: options.recordId,
@@ -304,9 +319,6 @@ export class LiveSummaryTask extends AbstractTask {
     const config = appConfig.getAll();
     const summaryConfig = config.ai.liveSummary;
     const asrModelId = summaryConfig.asrModelId;
-    if (!asrModelId) {
-      throw new Error("请先在 AI 配置中设置直播总结 ASR 模型");
-    }
 
     recordHistoryService.update({
       id: this.options.recordId,
@@ -327,6 +339,7 @@ export class LiveSummaryTask extends AbstractTask {
       record_start_time: targetRecord.record_start_time,
       title: targetRecord.title,
       video_file: this.options.videoFile || targetRecord.video_file,
+      ai_transcript_file: this.options.transcriptFile || targetRecord.ai_transcript_file,
     };
     const shouldSummarizeSession = this.options.summaryMode === "session";
     const sessionCandidates = targetRecord.live_id
@@ -337,7 +350,7 @@ export class LiveSummaryTask extends AbstractTask {
       : [targetClip];
     const sessionClips = shouldSummarizeSession ? sameLiveClips : [targetClip];
     if (!sessionClips.length) {
-      throw new Error("视频文件不存在");
+      throw new Error("视频文件或 ASR 转写文本不存在");
     }
     const targetClipIndex = sameLiveClips.findIndex((clip) => clip.id === targetRecord.id);
 
@@ -352,85 +365,134 @@ export class LiveSummaryTask extends AbstractTask {
       summaryMode: this.options.summaryMode || "record",
     });
 
-    this.custsomProgressMsg = "正在准备场次视频";
+    this.custsomProgressMsg = "正在准备场次视频或 ASR 转写";
     this.progress = 10;
     this.emitter.emit("task-progress", { taskId: this.taskId });
 
     const workDir = path.join(getTempPath(), "live-summary", this.taskId);
     try {
-      const asr = createASRProvider(asrModelId);
       const transcriptParts: LiveSummarySessionTranscriptPart[] = [];
-      for (let index = 0; index < sessionClips.length; index++) {
-        const clip = sessionClips[index];
-        const videoFile = clip.video_file ? await resolveExistingVideoFile(clip.video_file) : null;
-        if (!videoFile) {
-          throw new Error(`场次片段视频文件不存在：${clip.video_file || clip.id}`);
+      let transcript = "";
+      const sourceClips = await Promise.all(
+        sessionClips.map(async (clip) => ({
+          clip,
+          videoFile: clip.video_file ? await resolveExistingVideoFile(clip.video_file) : null,
+          transcriptFile: await resolveExistingTranscriptFile(clip.ai_transcript_file),
+        })),
+      );
+      const hasExistingVideo = sourceClips.some((item) => item.videoFile);
+      const existingSessionTranscript =
+        shouldSummarizeSession && !hasExistingVideo
+          ? sourceClips.find((item) => isSessionTranscriptFile(item.transcriptFile))?.transcriptFile
+          : null;
+
+      if (existingSessionTranscript) {
+        transcript = await fs.readFile(existingSessionTranscript, "utf8");
+        logger.info("复用已保存的整场 ASR 转写文本", {
+          taskId: this.taskId,
+          recordId: this.options.recordId,
+          transcriptFile: existingSessionTranscript,
+          transcriptLength: transcript.length,
+        });
+      } else {
+        let asr: ReturnType<typeof createASRProvider> | undefined;
+        for (let index = 0; index < sessionClips.length; index++) {
+          const { clip, videoFile, transcriptFile: savedTranscriptFile } = sourceClips[index];
+          // 视频优先；只有视频不存在时，才允许使用片段级 ASR 文本。
+          const transcriptFile =
+            videoFile || isSessionTranscriptFile(savedTranscriptFile) ? null : savedTranscriptFile;
+
+          this.custsomProgressMsg = `正在处理语音 ${index + 1}/${sessionClips.length}`;
+          this.progress = 15 + Math.floor((index / sessionClips.length) * 50);
+          this.emitter.emit("task-progress", { taskId: this.taskId });
+
+          let clipTranscript = "";
+          if (transcriptFile) {
+            clipTranscript = await fs.readFile(transcriptFile, "utf8");
+            logger.info("复用已保存的直播 ASR 转写文本", {
+              taskId: this.taskId,
+              recordId: clip.id,
+              transcriptFile,
+              transcriptLength: clipTranscript.length,
+            });
+          } else {
+            if (!videoFile) {
+              throw new Error(`场次片段视频或 ASR 转写文本不存在：${clip.id}`);
+            }
+            if (!asrModelId) {
+              throw new Error("请先在 AI 配置中设置直播总结 ASR 模型");
+            }
+            asr ||= createASRProvider(asrModelId);
+
+            const audioFile = path.join(workDir, `audio-${clip.id}.mp3`);
+            logger.info("开始提取直播总结音频", {
+              taskId: this.taskId,
+              recordId: clip.id,
+              videoFile,
+              audioFile,
+            });
+            await extractAudioToMp3(videoFile, audioFile, this.controller.signal);
+            logger.info("直播总结音频提取完成", {
+              taskId: this.taskId,
+              recordId: clip.id,
+              audioFile,
+            });
+            throwIfAborted(this.controller.signal);
+
+            logger.info("开始识别直播总结语音", {
+              taskId: this.taskId,
+              recordId: clip.id,
+              asrModelId,
+              audioFile,
+            });
+            const result = await asr.recognizeLocalFile(audioFile);
+            logger.info("直播总结语音识别完成", {
+              taskId: this.taskId,
+              recordId: clip.id,
+              textLength: result.text.length,
+              segmentCount: result.segments.length,
+            });
+            throwIfAborted(this.controller.signal);
+            clipTranscript = buildTranscript(result);
+          }
+
+          if (clipTranscript.trim()) {
+            transcriptParts.push({
+              clip: {
+                ...clip,
+                video_file: videoFile || clip.video_file,
+              },
+              transcript: clipTranscript,
+            });
+          }
         }
-
-        this.custsomProgressMsg = `正在处理语音 ${index + 1}/${sessionClips.length}`;
-        this.progress = 15 + Math.floor((index / sessionClips.length) * 50);
-        this.emitter.emit("task-progress", { taskId: this.taskId });
-
-        const audioFile = path.join(workDir, `audio-${clip.id}.mp3`);
-        logger.info("开始提取直播总结音频", {
-          taskId: this.taskId,
-          recordId: clip.id,
-          videoFile,
-          audioFile,
-        });
-        await extractAudioToMp3(videoFile, audioFile, this.controller.signal);
-        logger.info("直播总结音频提取完成", {
-          taskId: this.taskId,
-          recordId: clip.id,
-          audioFile,
-        });
-        throwIfAborted(this.controller.signal);
-
-        logger.info("开始识别直播总结语音", {
-          taskId: this.taskId,
-          recordId: clip.id,
-          asrModelId,
-          audioFile,
-        });
-        const result = await asr.recognizeLocalFile(audioFile);
-        logger.info("直播总结语音识别完成", {
-          taskId: this.taskId,
-          recordId: clip.id,
-          textLength: result.text.length,
-          segmentCount: result.segments.length,
-        });
-        throwIfAborted(this.controller.signal);
-
-        const clipTranscript = buildTranscript(result);
-        if (clipTranscript.trim()) {
-          transcriptParts.push({
-            clip: {
-              ...clip,
-              video_file: videoFile,
-            },
-            transcript: clipTranscript,
-          });
-        }
+        transcript = buildSessionTranscript(transcriptParts);
       }
-
-      const transcript = buildSessionTranscript(transcriptParts);
       if (!transcript.trim()) {
         throw new Error("ASR 未识别到有效语音内容");
       }
 
-      let transcriptFile: string | undefined;
+      let savedTranscriptFile: string | undefined;
       if (summaryConfig.saveTranscript) {
         const transcriptSuffix = shouldSummarizeSession
           ? ".session.transcript.txt"
           : ".transcript.txt";
-        transcriptFile = path.join(
-          path.dirname(this.options.videoFile),
-          `${path.basename(this.options.videoFile, path.extname(this.options.videoFile))}${transcriptSuffix}`,
+        const outputSourceFile =
+          this.options.videoFile ||
+          this.options.transcriptFile ||
+          targetRecord.video_file ||
+          targetRecord.ai_transcript_file;
+        if (!outputSourceFile) {
+          throw new Error("无法确定 ASR 转写文本保存路径");
+        }
+        savedTranscriptFile = path.join(
+          path.dirname(outputSourceFile),
+          `${getTranscriptOutputBase(outputSourceFile)}${transcriptSuffix}`,
         );
-        await fs.writeFile(transcriptFile, transcript);
+        await fs.writeFile(savedTranscriptFile, transcript);
         logger.info("直播总结转写文本已保存", {
           taskId: this.taskId,
-          transcriptFile,
+          transcriptFile: savedTranscriptFile,
           transcriptLength: transcript.length,
           sessionClipCount: sessionClips.length,
           summaryMode: this.options.summaryMode || "record",
@@ -515,7 +577,7 @@ export class LiveSummaryTask extends AbstractTask {
           ai_summary_status: "error",
           ai_summary: summary,
           ai_summary_error: exportErrorMessage,
-          ...(transcriptFile ? { ai_transcript_file: transcriptFile } : {}),
+          ...(savedTranscriptFile ? { ai_transcript_file: savedTranscriptFile } : {}),
           ai_summary_time: Date.now(),
         });
         throw new Error(exportErrorMessage);
@@ -526,7 +588,7 @@ export class LiveSummaryTask extends AbstractTask {
         ai_summary_status: "completed",
         ai_summary: summary,
         ai_summary_error: "",
-        ...(transcriptFile ? { ai_transcript_file: transcriptFile } : {}),
+        ...(savedTranscriptFile ? { ai_transcript_file: savedTranscriptFile } : {}),
         ai_summary_time: Date.now(),
       });
       logger.info("直播总结任务完成", {

@@ -136,7 +136,7 @@ const getVideoFile = async (id: number): Promise<string | null> => {
     throw new Error("记录不存在");
   }
   if (!data.video_file) {
-    throw new Error("视频文件不存在");
+    return null;
   }
   if (await fs.pathExists(data.video_file)) {
     return data.video_file;
@@ -146,6 +146,12 @@ const getVideoFile = async (id: number): Promise<string | null> => {
     return mp4File;
   }
   return null;
+};
+
+const getTranscriptFile = async (id: number): Promise<string | null> => {
+  const data = recordHistory.getRecordById(id);
+  if (!data?.ai_transcript_file) return null;
+  return (await fs.pathExists(data.ai_transcript_file)) ? data.ai_transcript_file : null;
 };
 
 const createVideoFileResponse = async (videoFile: string) => {
@@ -288,11 +294,12 @@ const addLiveSummaryRouteTask = async (
   }
 
   const videoFile = await getVideoFile(recordId);
-  if (!videoFile) {
+  const transcriptFile = await getTranscriptFile(recordId);
+  if (!videoFile && !transcriptFile) {
     ctx.status = 400;
     ctx.body = {
       code: 400,
-      message: "视频文件不存在",
+      message: "视频文件或 ASR 转写文本不存在",
     };
     return;
   }
@@ -300,7 +307,8 @@ const addLiveSummaryRouteTask = async (
   const task = addLiveSummaryTask(
     {
       recordId,
-      videoFile,
+      ...(videoFile ? { videoFile } : {}),
+      ...(transcriptFile ? { transcriptFile } : {}),
       summaryMode: options.summaryMode,
       title: record.title,
       streamer: record.streamer?.name,

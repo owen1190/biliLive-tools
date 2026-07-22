@@ -263,4 +263,43 @@ describe("record history routes", () => {
       { force: true },
     );
   });
+
+  it("视频已同步后，整场总结入口可以复用已保存的 ASR 转写", async () => {
+    const transcriptFile = "/records/live.transcript.txt";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "completed",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({
+      id: 1,
+      ai_transcript_file: transcriptFile,
+    });
+    mockPathExists.mockImplementation(async (filePath: string) => filePath === transcriptFile);
+
+    const ctx: any = {
+      params: { id: "1" },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary/session", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: 1,
+        transcriptFile,
+        summaryMode: "session",
+      }),
+      { force: true },
+    );
+    expect(mockAddLiveSummaryTask.mock.calls[0][0]).not.toHaveProperty("videoFile");
+    expect(ctx.body.message).toBe("已添加整场直播总结任务");
+  });
 });

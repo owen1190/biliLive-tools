@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     ensureDir: vi.fn(),
     remove: vi.fn(),
     pathExists: vi.fn(),
+    readFile: vi.fn(),
     logger: {
       info: vi.fn(),
       error: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock("fs-extra", () => ({
     ensureDir: mocks.ensureDir,
     remove: mocks.remove,
     pathExists: mocks.pathExists,
+    readFile: mocks.readFile,
     writeFile: vi.fn(),
   },
 }));
@@ -142,6 +144,7 @@ describe("LiveSummaryTask", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.pathExists.mockResolvedValue(true);
+    mocks.readFile.mockResolvedValue("已保存的 ASR 转写内容");
     mocks.ensureDir.mockResolvedValue(undefined);
     mocks.remove.mockResolvedValue(undefined);
     mocks.spawn.mockImplementation(() => {
@@ -215,5 +218,76 @@ describe("LiveSummaryTask", () => {
         ai_summary_error: expect.stringContaining("Notion"),
       }),
     );
+  });
+
+  it("reuses a saved transcript when the video has already been synchronized", async () => {
+    const transcriptFile = "/records/live.transcript.txt";
+    mocks.queryRecord.mockReturnValue({
+      id: 108,
+      streamer_id: 1,
+      live_id: undefined,
+      record_start_time: 1781105107602,
+      title: "直播标题",
+      video_file: undefined,
+      ai_transcript_file: transcriptFile,
+    });
+    mocks.pathExists.mockImplementation(async (filePath: string) => filePath === transcriptFile);
+    mocks.readFile.mockResolvedValue("[00:00:00-00:00:03] 已保存的 ASR 转写内容");
+    mocks.getEnabledSummaryExportTargetNames.mockReturnValue([]);
+
+    const task = new LiveSummaryTask({
+      recordId: 108,
+      transcriptFile,
+      summaryMode: "session",
+      title: "直播标题",
+      streamer: "主播",
+      roomId: "123",
+      platform: "Bilibili",
+      recordStartTime: 1781105107602,
+    });
+
+    await expect((task as any).run()).resolves.toBeUndefined();
+
+    expect(mocks.createASRProvider).not.toHaveBeenCalled();
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    expect(mocks.readFile).toHaveBeenCalledWith(transcriptFile, "utf8");
+    expect(mocks.updateRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 108,
+        ai_summary_status: "completed",
+      }),
+    );
+  });
+
+  it("prefers the video over a saved transcript when both are available", async () => {
+    const transcriptFile = "/records/live.transcript.txt";
+    mocks.queryRecord.mockReturnValue({
+      id: 108,
+      streamer_id: 1,
+      live_id: undefined,
+      record_start_time: 1781105107602,
+      title: "直播标题",
+      video_file: "/records/live.flv",
+      ai_transcript_file: transcriptFile,
+    });
+    mocks.pathExists.mockResolvedValue(true);
+    mocks.getEnabledSummaryExportTargetNames.mockReturnValue([]);
+
+    const task = new LiveSummaryTask({
+      recordId: 108,
+      videoFile: "/records/live.flv",
+      transcriptFile,
+      title: "直播标题",
+      streamer: "主播",
+      roomId: "123",
+      platform: "Bilibili",
+      recordStartTime: 1781105107602,
+    });
+
+    await expect((task as any).run()).resolves.toBeUndefined();
+
+    expect(mocks.createASRProvider).toHaveBeenCalledWith("asr-1");
+    expect(mocks.spawn).toHaveBeenCalled();
+    expect(mocks.readFile).not.toHaveBeenCalled();
   });
 });
