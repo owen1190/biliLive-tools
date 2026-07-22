@@ -383,8 +383,9 @@ export class LiveSummaryTask extends AbstractTask {
       const hasExistingVideo = sourceClips.some((item) => item.videoFile);
       const existingSessionTranscript =
         shouldSummarizeSession && !hasExistingVideo
-          ? sourceClips.find((item) => isSessionTranscriptFile(item.transcriptFile))?.transcriptFile
-          : undefined;
+          ? sourceClips.find((item) => isSessionTranscriptFile(item.transcriptFile ?? undefined))
+              ?.transcriptFile
+          : null;
 
       if (existingSessionTranscript) {
         transcript = await fs.readFile(existingSessionTranscript, "utf8");
@@ -400,8 +401,8 @@ export class LiveSummaryTask extends AbstractTask {
           const { clip, videoFile, transcriptFile: savedTranscriptFile } = sourceClips[index];
           // 视频优先；只有视频不存在时，才允许使用片段级 ASR 文本。
           const transcriptFile =
-            videoFile || isSessionTranscriptFile(savedTranscriptFile)
-              ? undefined
+            videoFile || isSessionTranscriptFile(savedTranscriptFile ?? undefined)
+              ? null
               : savedTranscriptFile;
 
           this.custsomProgressMsg = `正在处理语音 ${index + 1}/${sessionClips.length}`;
