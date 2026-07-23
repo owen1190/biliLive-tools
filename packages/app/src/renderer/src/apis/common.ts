@@ -88,6 +88,29 @@ export const getFiles = async (params: {
   return res.data;
 };
 
+export async function getFilesRecursively(path: string, exts?: string[]) {
+  const pending = [path];
+  const files: string[] = [];
+  const visited = new Set<string>();
+
+  while (pending.length) {
+    const currentPath = pending.pop()!;
+    if (visited.has(currentPath)) continue;
+    visited.add(currentPath);
+
+    const result = await getFiles({ path: currentPath, exts });
+    for (const item of result.list) {
+      if (item.type === "directory") {
+        pending.push(item.path);
+      } else {
+        files.push(item.path);
+      }
+    }
+  }
+
+  return files;
+}
+
 const fileJoin = async (dir: string, name: string): Promise<string> => {
   const res = await request.post(`/files/join`, {
     dir,
@@ -299,6 +322,7 @@ const common = {
   version,
   versionTest,
   getFiles,
+  getFilesRecursively,
   readXmlTimestamp,
   getFontList,
   uploadCover,

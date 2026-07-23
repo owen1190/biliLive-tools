@@ -72,7 +72,7 @@ describe("summary export helpers", () => {
     ).toBe("主播 - 2026-06-09 13:30");
   });
 
-  it("adds the full-session marker to exported document titles", () => {
+  it("adds the bracketed full-session marker to exported document titles", () => {
     expect(
       buildSummaryExportTitle(
         {
@@ -84,7 +84,7 @@ describe("summary export helpers", () => {
         },
         "",
       ),
-    ).toBe("主播 - 2026-06-09 13:30（整场）");
+    ).toBe("主播 - 2026-06-09 13:30【整场】");
 
     expect(
       buildSummaryExportTitle(
@@ -96,7 +96,7 @@ describe("summary export helpers", () => {
         },
         "{title} - {time}",
       ),
-    ).toBe("直播标题（整场） - 2026-06-09 13:30");
+    ).toBe("直播标题 - 2026-06-09 13:30【整场】");
   });
 
   it("builds document links for notification content", () => {

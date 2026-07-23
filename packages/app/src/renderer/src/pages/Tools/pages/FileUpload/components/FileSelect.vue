@@ -27,6 +27,7 @@
 <script setup lang="ts">
 import PartArea from "./PartArea.vue";
 import showDirectoryDialog from "@renderer/components/showDirectoryDialog";
+import { commonApi } from "@renderer/apis";
 import { useDropZone } from "@vueuse/core";
 import { ArchiveOutline as ArchiveIcon } from "@vicons/ionicons5";
 
@@ -109,6 +110,37 @@ const selectFromPath = async (defaultPath?: string) => {
   fileList.value = fileList.value.concat(newFiles);
 };
 
+const selectDirectory = async (defaultPath?: string) => {
+  let directory: string | undefined;
+  if (window.isWeb) {
+    directory = (
+      await showDirectoryDialog({
+        type: "directory",
+        defaultPath,
+      })
+    )?.[0];
+  } else {
+    directory = await window.api.openDirectory({
+      defaultPath,
+      title: "选择本地视频目录",
+    });
+  }
+
+  if (!directory) return;
+
+  const files = await commonApi.getFilesRecursively(directory, props.extensions);
+  const newFiles = files
+    .filter((file) => !fileList.value.some((item) => item.path === file))
+    .map((file) => ({
+      id: uuid(),
+      title: window.path.parse(file).name,
+      path: file,
+      visible: false,
+      ext: window.path.parse(file).ext,
+    }));
+  fileList.value = fileList.value.concat(newFiles);
+};
+
 watch(
   fileList,
   () => {
@@ -155,6 +187,7 @@ const { isOverDropZone } = useDropZone(dropZoneRef, {
 defineExpose({
   select,
   selectFromPath,
+  selectDirectory,
 });
 </script>
 

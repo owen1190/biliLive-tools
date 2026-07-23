@@ -115,8 +115,12 @@ export function buildSummaryExportTitle(input: SummaryExportContext, template?: 
       )
     : `${room} - ${time}`;
   const title = cleanExportTitle(raw) || `直播总结 - ${time}`;
-  if (input.summaryMode === "session" && !title.includes("整场")) {
-    return `${title}（整场）`;
+  if (input.summaryMode === "session") {
+    const titleWithoutSessionMarker = title
+      .replace(/（整场）|\(整场\)|【整场】/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return `${titleWithoutSessionMarker}【整场】`;
   }
   return title;
 }

@@ -4,6 +4,7 @@
     <div class="flex justify-center align-center" style="margin-bottom: 20px; gap: 10px">
       <span style="cursor: pointer; color: #958e8e" @click="clear">清空</span>
       <n-button @click="addFiles"> 添加 </n-button>
+      <n-button secondary @click="addFilesFromDirectory">选择本地视频目录</n-button>
       <n-button type="primary" @click="sync" title="立即同步(ctrl+enter)"> 立即上传 </n-button>
     </div>
 
@@ -293,6 +294,17 @@ const removeFavoritePath = (id: string) => {
 const fileSelect = ref<InstanceType<typeof FileSelect> | null>(null);
 const addFiles = async () => {
   fileSelect.value?.select();
+};
+
+const addFilesFromDirectory = async () => {
+  try {
+    await fileSelect.value?.selectDirectory();
+  } catch (error: any) {
+    notice.error({
+      title: error?.message || error || "读取本地视频目录失败",
+      duration: 1500,
+    });
+  }
 };
 
 const addFilesFromPath = async (path: string) => {
