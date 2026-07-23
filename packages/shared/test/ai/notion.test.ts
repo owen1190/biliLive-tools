@@ -71,6 +71,36 @@ describe("notion helpers", () => {
     expect(formatNotionError(error)).toBe("Notion API 调用失败：HTTP 400，code validation_error");
   });
 
+  it("formats a response transported as a JSON string", () => {
+    const error = {
+      isAxiosError: true,
+      response: {
+        status: 429,
+        data: JSON.stringify({
+          code: "rate_limited",
+          message: "You have been rate limited.",
+          additional_data: {
+            rate_limit_reason: "public_api_request_rate_limit",
+          },
+        }),
+      },
+    };
+
+    expect(formatNotionError(error)).toBe(
+      "Notion API 调用失败：HTTP 429，code rate_limited，You have been rate limited.，限流原因：public_api_request_rate_limit",
+    );
+  });
+
+  it("keeps network error code when an Axios response is unavailable", () => {
+    expect(
+      formatNotionError({
+        isAxiosError: true,
+        code: "ECONNRESET",
+        message: "socket hang up",
+      }),
+    ).toBe("Notion API 调用失败：code ECONNRESET，socket hang up");
+  });
+
   it("uses a readable fallback when Notion throws an empty error", () => {
     expect(formatNotionError(new Error())).toBe("Notion API 调用失败：未知错误");
   });

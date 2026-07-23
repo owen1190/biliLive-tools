@@ -27,6 +27,7 @@ type NotionPageResponse = {
 const NOTION_BASE_URL = "https://api.notion.com/v1";
 const NOTION_VERSION = "2026-03-11";
 const RICH_TEXT_CHUNK_SIZE = 1900;
+const NOTION_RETRY_LIMIT = 2;
 
 function splitText(content: string, size: number) {
   const chunks: string[] = [];
@@ -106,28 +107,93 @@ export function extractNotionPageId(input: string) {
   return "";
 }
 
-function formatNotionResponseError(data: unknown, status?: number, fallback?: string) {
+type NotionErrorRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): NotionErrorRecord | undefined {
+  return value && typeof value === "object" ? (value as NotionErrorRecord) : undefined;
+}
+
+function parseResponseData(data: unknown) {
+  if (typeof data !== "string") return data;
+  const value = data.trim();
+  if (!value) return data;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return data;
+  }
+}
+
+function getResponse(error: unknown) {
+  return asRecord(asRecord(error)?.response);
+}
+
+function getStatus(error: unknown) {
+  const responseStatus = getResponse(error)?.status;
+  const status = responseStatus ?? asRecord(error)?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function getErrorCode(error: unknown) {
+  const responseCode = asRecord(parseResponseData(getResponse(error)?.data))?.code;
+  const code = responseCode ?? asRecord(error)?.code;
+  return typeof code === "string" || typeof code === "number" ? String(code) : "";
+}
+
+function getErrorMessage(error: unknown) {
+  const response = asRecord(parseResponseData(getResponse(error)?.data));
+  const nestedError = asRecord(response?.error);
+  const responseMessage = response?.message ?? response?.msg ?? nestedError?.message;
+  if (typeof responseMessage === "string" && responseMessage.trim()) return responseMessage.trim();
+
+  const message = asRecord(error)?.message;
+  if (typeof message === "string" && message.trim()) return message.trim();
+
+  const name = asRecord(error)?.name;
+  return typeof name === "string" && name && name !== "Error" ? name : "";
+}
+
+function formatNotionResponseError(data: unknown, status?: number, fallback?: string, code?: string) {
   const parts: string[] = [];
   if (status) parts.push(`HTTP ${status}`);
-  if (data && typeof data === "object") {
-    const response = data as { code?: unknown; msg?: unknown; message?: unknown };
-    if (response.code !== undefined) parts.push(`code ${response.code}`);
-    const message = typeof response.message === "string" && response.message
-      ? response.message
-      : typeof response.msg === "string" && response.msg
-        ? response.msg
-        : "";
-    if (message) parts.push(message);
+  const response = asRecord(parseResponseData(data));
+  const responseCode = response?.code;
+  if (responseCode !== undefined) parts.push(`code ${responseCode}`);
+  else if (code) parts.push(`code ${code}`);
+
+  const nestedError = asRecord(response?.error);
+  const message = response?.message ?? response?.msg ?? nestedError?.message;
+  if (typeof message === "string" && message) {
+    parts.push(message);
   } else if (typeof data === "string" && data) {
     parts.push(data);
+  }
+
+  const additionalData = asRecord(response?.additional_data);
+  const rateLimitReason = additionalData?.rate_limit_reason;
+  if (typeof rateLimitReason === "string" && rateLimitReason) {
+    parts.push(`限流原因：${rateLimitReason}`);
   }
   if (!parts.length && fallback) parts.push(fallback);
   return parts.join("，") || "未知错误";
 }
 
 export function formatNotionError(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const status = error.response?.status;
+  let isAxiosError = false;
+  try {
+    isAxiosError = axios.isAxiosError(error);
+  } catch {
+    // Keep formatting useful even if the error came from another Axios copy in a bundled runtime.
+  }
+
+  const response = getResponse(error);
+  if (
+    isAxiosError ||
+    response ||
+    asRecord(error)?.isAxiosError === true ||
+    getStatus(error) !== undefined
+  ) {
+    const status = getStatus(error);
     if (status === 401) {
       return "Notion Token 无效或已失效，请检查 Internal Integration Token";
     }
@@ -138,21 +204,44 @@ export function formatNotionError(error: unknown) {
       return "Notion 页面不存在或当前 integration 无访问权限，请检查页面 ID/链接，并确认已将目标页面分享给该 integration";
     }
 
-    const message = error.response?.data && typeof error.response.data === "object"
-      ? (error.response.data as { message?: unknown }).message
-      : undefined;
-    if (typeof message === "string" && message) return message;
     return `Notion API 调用失败：${formatNotionResponseError(
-      error.response?.data,
+      response?.data,
       status,
-      error.message,
+      getErrorMessage(error),
+      getErrorCode(error),
     )}`;
   }
 
   if (error instanceof Error) {
-    return error.message || "Notion API 调用失败：未知错误";
+    return error.message
+      ? `Notion API 调用失败：${error.message}`
+      : "Notion API 调用失败：未知错误";
   }
-  return String(error) || "Notion API 调用失败：未知错误";
+  const message = getErrorMessage(error);
+  return message
+    ? `Notion API 调用失败：${message}`
+    : "Notion API 调用失败：未知错误";
+}
+
+function getRetryAfterMs(error: unknown, attempt: number) {
+  const status = getStatus(error);
+  if (status !== 429 && status !== 529) return 0;
+
+  const headers = getResponse(error)?.headers;
+  const headerRecord = asRecord(headers);
+  const getHeader = headerRecord?.get;
+  const retryAfter = typeof getHeader === "function"
+    ? getHeader.call(headers, "retry-after")
+    : headerRecord?.["retry-after"] ?? headerRecord?.["Retry-After"];
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(Math.max(seconds * 1000, 1000), 30000);
+  }
+  return Math.min(1000 * 2 ** attempt, 30000);
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 export function buildNotionChildPagePayload(parentPageId: string, title: string) {
@@ -190,14 +279,28 @@ export class NotionClient {
     });
   }
 
+  private async requestWithRetry<T>(request: () => Promise<T>) {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await request();
+      } catch (error) {
+        const retryAfterMs = getRetryAfterMs(error, attempt);
+        if (!retryAfterMs || attempt >= NOTION_RETRY_LIMIT) throw error;
+        await wait(retryAfterMs);
+      }
+    }
+  }
+
   private async appendMarkdownToPage(pageId: string, markdown: string) {
     const blocks = markdownToNotionBlocks(markdown);
     if (!blocks.length) return;
 
     for (const children of chunkArray(blocks, 100)) {
-      await this.client.patch(`/blocks/${pageId}/children`, {
-        children,
-      });
+      await this.requestWithRetry(() =>
+        this.client.patch(`/blocks/${pageId}/children`, {
+          children,
+        }),
+      );
     }
   }
 
@@ -211,9 +314,11 @@ export class NotionClient {
 
   async createChildPage(input: { title: string }) {
     try {
-      const response = await this.client.post<NotionPageResponse>(
-        "/pages",
-        buildNotionChildPagePayload(this.config.pageId, input.title),
+      const response = await this.requestWithRetry(() =>
+        this.client.post<NotionPageResponse>(
+          "/pages",
+          buildNotionChildPagePayload(this.config.pageId, input.title),
+        ),
       );
       if (!response.data.id) {
         throw new Error("Notion 创建子页面失败：未返回页面 ID");
