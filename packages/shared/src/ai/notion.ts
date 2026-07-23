@@ -163,10 +163,13 @@ function formatNotionResponseError(data: unknown, status?: number, fallback?: st
 
   const nestedError = asRecord(response?.error);
   const message = response?.message ?? response?.msg ?? nestedError?.message;
+  let hasMessage = false;
   if (typeof message === "string" && message) {
     parts.push(message);
+    hasMessage = true;
   } else if (typeof data === "string" && data) {
     parts.push(data);
+    hasMessage = true;
   }
 
   const additionalData = asRecord(response?.additional_data);
@@ -174,7 +177,7 @@ function formatNotionResponseError(data: unknown, status?: number, fallback?: st
   if (typeof rateLimitReason === "string" && rateLimitReason) {
     parts.push(`限流原因：${rateLimitReason}`);
   }
-  if (!parts.length && fallback) parts.push(fallback);
+  if (!hasMessage && fallback) parts.push(fallback);
   return parts.join("，") || "未知错误";
 }
 
