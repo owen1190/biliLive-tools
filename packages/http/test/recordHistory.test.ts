@@ -7,6 +7,7 @@ const {
   mockGetRecordById,
   mockQueryRecord,
   mockAddLiveSummaryTask,
+  mockExportExistingLiveSummary,
 } = vi.hoisted(() => ({
   mockPathExists: vi.fn(),
   mockStat: vi.fn(),
@@ -16,6 +17,7 @@ const {
   mockGetRecordById: vi.fn(),
   mockQueryRecord: vi.fn(),
   mockAddLiveSummaryTask: vi.fn(),
+  mockExportExistingLiveSummary: vi.fn(),
 }));
 
 vi.mock("@koa/router", () => {
@@ -64,7 +66,7 @@ vi.mock("@biliLive-tools/shared/db/index.js", () => ({
 
 vi.mock("@biliLive-tools/shared/task/liveSummary.js", () => ({
   addLiveSummaryTask: mockAddLiveSummaryTask,
-  exportExistingLiveSummary: vi.fn(),
+  exportExistingLiveSummary: mockExportExistingLiveSummary,
 }));
 
 vi.mock("../src/index.js", () => ({
@@ -301,5 +303,23 @@ describe("record history routes", () => {
     );
     expect(mockAddLiveSummaryTask.mock.calls[0][0]).not.toHaveProperty("videoFile");
     expect(ctx.body.message).toBe("已添加整场直播总结任务");
+  });
+
+  it("重新导出入口会传递选中的目标平台", async () => {
+    const ctx: any = {
+      params: { id: "1" },
+      request: {
+        body: {
+          target: "notion",
+        },
+      },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary/export", "POST")(ctx, async () => {});
+
+    expect(mockExportExistingLiveSummary).toHaveBeenCalledWith(1, "notion");
+    expect(ctx.body.message).toBe("已重新导出直播总结");
   });
 });

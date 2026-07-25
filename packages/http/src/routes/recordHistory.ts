@@ -5,7 +5,11 @@ import Router from "@koa/router";
 import { replaceExtName } from "@biliLive-tools/shared/utils/index.js";
 import recordHistory from "@biliLive-tools/shared/recorder/recordHistory.js";
 import { recordHistoryService } from "@biliLive-tools/shared/db/index.js";
-import { addLiveSummaryTask, exportExistingLiveSummary } from "@biliLive-tools/shared/task/liveSummary.js";
+import {
+  addLiveSummaryTask,
+  exportExistingLiveSummary,
+} from "@biliLive-tools/shared/task/liveSummary.js";
+import type { SummaryExportTarget } from "@biliLive-tools/shared/ai/summaryExport.js";
 import { fileCache } from "../index.js";
 
 const router = new Router({
@@ -358,8 +362,18 @@ router.post("/:id/live-summary/export", async (ctx) => {
     return;
   }
 
+  const target = ctx.request.body?.target as SummaryExportTarget | undefined;
+  if (target && !["feishu", "notion"].includes(target)) {
+    ctx.status = 400;
+    ctx.body = {
+      code: 400,
+      message: "重新导出目标必须是 feishu 或 notion",
+    };
+    return;
+  }
+
   try {
-    await exportExistingLiveSummary(recordId);
+    await exportExistingLiveSummary(recordId, target);
     ctx.body = {
       code: 200,
       message: "已重新导出直播总结",

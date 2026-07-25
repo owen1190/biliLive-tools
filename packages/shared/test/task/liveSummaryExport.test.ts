@@ -123,4 +123,19 @@ describe("exportExistingLiveSummaryWithDeps", () => {
       expect.any(Object),
     );
   });
+
+  it("passes the selected export target when re-exporting", async () => {
+    vi.mocked(deps.getEnabledTargetNames).mockReturnValue(["Notion"]);
+    vi.mocked(deps.exportSummary).mockResolvedValue([]);
+
+    await exportExistingLiveSummaryWithDeps(38, deps, "notion");
+
+    expect(deps.getEnabledTargetNames).toHaveBeenCalledWith(expect.any(Object), "notion");
+    expect(deps.exportSummary).toHaveBeenCalledWith(
+      "已经生成的总结",
+      expect.any(Object),
+      expect.any(Object),
+      "notion",
+    );
+  });
 });

@@ -20,6 +20,8 @@ export interface SummaryExportContext {
   recordStartTime?: number;
 }
 
+export type SummaryExportTarget = "feishu" | "notion" | "yuque";
+
 export type SummaryExportResult =
   | {
       target: "feishu";
@@ -195,12 +197,17 @@ function resolveYuqueConfig(config: YuqueExportConfig | undefined, input: Summar
   };
 }
 
-export function getEnabledSummaryExportTargetNames(config: LiveSummaryConfig) {
+export function getEnabledSummaryExportTargetNames(
+  config: LiveSummaryConfig,
+  target?: SummaryExportTarget,
+) {
   const names: string[] = [];
   const feishuConfig = getFeishuConfig(config);
-  if (feishuConfig?.enabled) names.push("飞书文档");
-  if (config.exportTargets?.notion?.enabled) names.push("Notion");
-  if (config.exportTargets?.yuque?.enabled) names.push("语雀文档");
+  if ((!target || target === "feishu") && feishuConfig?.enabled) names.push("飞书文档");
+  if ((!target || target === "notion") && config.exportTargets?.notion?.enabled)
+    names.push("Notion");
+  if ((!target || target === "yuque") && config.exportTargets?.yuque?.enabled)
+    names.push("语雀文档");
   return names;
 }
 
@@ -208,7 +215,15 @@ export async function exportSummaryToTargets(
   summary: string,
   input: SummaryExportContext,
   config: LiveSummaryConfig,
+  target?: SummaryExportTarget,
 ) {
+  const enabledTargetNames = getEnabledSummaryExportTargetNames(config, target);
+  if (target && !enabledTargetNames.length) {
+    const targetName =
+      target === "feishu" ? "飞书文档" : target === "notion" ? "Notion" : "语雀文档";
+    throw new Error(`请先在 AI 配置中启用${targetName}导出目标`);
+  }
+
   const markdown = buildSummaryExportMarkdown(summary, input);
   const errors: string[] = [];
   const results: SummaryExportResult[] = [];
@@ -216,7 +231,7 @@ export async function exportSummaryToTargets(
   const notionConfig = resolveNotionConfig(config.exportTargets?.notion, input);
   const yuqueConfig = resolveYuqueConfig(config.exportTargets?.yuque, input);
 
-  if (feishuConfig?.enabled) {
+  if ((!target || target === "feishu") && feishuConfig?.enabled) {
     const documentId = extractFeishuDocumentId(feishuConfig.documentId);
     const folderToken = extractFeishuFolderToken(feishuConfig.folderToken || "");
     const mode = feishuConfig.mode || "append";
@@ -281,7 +296,7 @@ export async function exportSummaryToTargets(
     }
   }
 
-  if (notionConfig?.enabled) {
+  if ((!target || target === "notion") && notionConfig?.enabled) {
     const pageId = extractNotionPageId(notionConfig.pageId);
     const mode = notionConfig.mode || "append";
     const exportTitle = buildSummaryExportTitle(input, notionConfig.titleTemplate);
@@ -339,7 +354,7 @@ export async function exportSummaryToTargets(
     }
   }
 
-  if (yuqueConfig?.enabled) {
+  if ((!target || target === "yuque") && yuqueConfig?.enabled) {
     const namespace = extractYuqueNamespace(yuqueConfig.namespace);
     const slug = extractYuqueDocSlug(yuqueConfig.slug || "");
     const mode = yuqueConfig.mode || "append";

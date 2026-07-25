@@ -10,6 +10,7 @@ import {
   exportSummaryToTargets,
   getEnabledSummaryExportTargetNames,
   SummaryExportError,
+  type SummaryExportTarget,
   type SummaryExportResult,
 } from "../ai/summaryExport.js";
 import { appConfig } from "../config.js";
@@ -619,7 +620,7 @@ export class LiveSummaryTask extends AbstractTask {
   }
 }
 
-export async function exportExistingLiveSummary(recordId: number) {
+export async function exportExistingLiveSummary(recordId: number, target?: SummaryExportTarget) {
   return exportExistingLiveSummaryWithDeps(recordId, {
     getRecord: (id) => {
       const record = recordHistoryService.query({
@@ -639,7 +640,7 @@ export async function exportExistingLiveSummary(recordId: number) {
     exportSummary: exportSummaryToTargets,
     updateRecord: (data) => recordHistoryService.update(data),
     logSuccess: (data) => logger.info("已重新导出直播总结", data),
-  });
+  }, target);
 }
 
 export function addLiveSummaryTask(

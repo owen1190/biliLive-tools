@@ -1,6 +1,10 @@
 import type { AppConfig } from "@biliLive-tools/types";
 
-import type { SummaryExportContext, SummaryExportResult } from "../ai/summaryExport.js";
+import type {
+  SummaryExportContext,
+  SummaryExportResult,
+  SummaryExportTarget,
+} from "../ai/summaryExport.js";
 import { formatLiveSummaryTitle } from "./liveSummarySession.js";
 
 type LiveSummaryConfig = AppConfig["ai"]["liveSummary"];
@@ -21,11 +25,12 @@ export interface LiveSummaryExportRecord {
 export interface LiveSummaryExportDeps {
   getRecord(recordId: number): LiveSummaryExportRecord | undefined;
   getSummaryConfig(): LiveSummaryConfig;
-  getEnabledTargetNames(config: LiveSummaryConfig): string[];
+  getEnabledTargetNames(config: LiveSummaryConfig, target?: SummaryExportTarget): string[];
   exportSummary(
     summary: string,
     input: SummaryExportContext,
     config: LiveSummaryConfig,
+    target?: SummaryExportTarget,
   ): Promise<void | SummaryExportResult[]>;
   updateRecord(data: {
     id: number;
@@ -44,6 +49,7 @@ function isSessionSummary(summary: string) {
 export async function exportExistingLiveSummaryWithDeps(
   recordId: number,
   deps: LiveSummaryExportDeps,
+  target?: SummaryExportTarget,
 ) {
   const record = deps.getRecord(recordId);
   if (!record) {
@@ -54,9 +60,15 @@ export async function exportExistingLiveSummaryWithDeps(
   }
 
   const summaryConfig = deps.getSummaryConfig();
-  const exportTargets = deps.getEnabledTargetNames(summaryConfig);
+  const exportTargets = deps.getEnabledTargetNames(summaryConfig, target);
   if (!exportTargets.length) {
-    throw new Error("请先在 AI 配置中启用飞书或 Notion 导出目标");
+    throw new Error(
+      target
+        ? `请先在 AI 配置中启用${
+            target === "feishu" ? "飞书文档" : target === "notion" ? "Notion" : "语雀文档"
+          }导出目标`
+        : "请先在 AI 配置中启用飞书或 Notion 导出目标",
+    );
   }
 
   const summaryMode = isSessionSummary(record.ai_summary) ? "session" : "record";
@@ -72,7 +84,7 @@ export async function exportExistingLiveSummaryWithDeps(
   };
 
   try {
-    await deps.exportSummary(record.ai_summary, input, summaryConfig);
+    await deps.exportSummary(record.ai_summary, input, summaryConfig, target);
     deps.updateRecord({
       id: recordId,
       ai_summary_status: "completed",

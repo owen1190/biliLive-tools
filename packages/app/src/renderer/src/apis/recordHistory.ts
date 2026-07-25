@@ -45,6 +45,8 @@ export interface QueryRecordsResponse {
   };
 }
 
+export type LiveSummaryExportTarget = "feishu" | "notion";
+
 export interface RecentRecordClipItem {
   id: number;
   title: string;
@@ -140,11 +142,17 @@ export async function generateLiveSessionSummary(id: number, options?: { prompt?
   return res.data;
 }
 
-export async function exportLiveSummary(id: number): Promise<{
+export async function exportLiveSummary(
+  id: number,
+  target?: LiveSummaryExportTarget,
+): Promise<{
   code: number;
   message: string;
 }> {
-  const res = await request.post(`/record-history/${id}/live-summary/export`);
+  const res = await request.post(
+    `/record-history/${id}/live-summary/export`,
+    target ? { target } : undefined,
+  );
   return res.data;
 }
 

@@ -107,7 +107,7 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from "vue-router";
 import { recordHistoryApi } from "../../apis";
-import { NButton, NIcon, NTag } from "naive-ui";
+import { NButton, NDropdown, NIcon, NTag } from "naive-ui";
 import { FolderOpenOutline, DownloadOutline } from "@vicons/ionicons5";
 import { Delete20Regular, PlayCircle24Regular } from "@vicons/fluent";
 import { FileOpenOutlined } from "@vicons/material";
@@ -118,7 +118,7 @@ import { toVideoPlayerPage } from "@renderer/utils/pages";
 import { formatTime, formatDuration } from "@renderer/utils";
 
 import type { VNode } from "vue";
-import type { QueryRecordsParams } from "../../apis/recordHistory";
+import type { LiveSummaryExportTarget, QueryRecordsParams } from "../../apis/recordHistory";
 
 // 类型定义
 interface StreamerInfo {
@@ -410,6 +410,31 @@ const renderTranscriptDownloadButton = (row: LiveRecord) => {
   );
 };
 
+const renderSummaryExportButton = (row: LiveRecord) =>
+  h(
+    NDropdown,
+    {
+      trigger: "click",
+      options: [
+        { label: "导出到飞书", key: "feishu" },
+        { label: "导出到 Notion", key: "notion" },
+      ],
+      onSelect: (target: LiveSummaryExportTarget) => exportSummary(row, target),
+    },
+    {
+      default: () =>
+        h(
+          NButton,
+          {
+            size: "small",
+            text: true,
+            loading: summaryExportingIds.value.includes(row.id),
+          },
+          { default: () => "重新导出" },
+        ),
+    },
+  );
+
 const renderSummaryCell = (row: LiveRecord) => {
   if (row.ai_summary_status === "completed" && row.ai_summary) {
     const actions: VNode[] = [
@@ -429,16 +454,7 @@ const renderSummaryCell = (row: LiveRecord) => {
       actions.push(transcriptButton);
     }
     actions.push(
-      h(
-        NButton,
-        {
-          size: "small",
-          text: true,
-          loading: summaryExportingIds.value.includes(row.id),
-          onClick: () => exportSummary(row),
-        },
-        { default: () => "重新导出" },
-      ),
+      renderSummaryExportButton(row),
       h(
         NButton,
         {
@@ -485,16 +501,7 @@ const renderSummaryCell = (row: LiveRecord) => {
           },
           { default: () => "查看" },
         ),
-        h(
-          NButton,
-          {
-            size: "small",
-            text: true,
-            loading: summaryExportingIds.value.includes(row.id),
-            onClick: () => exportSummary(row),
-          },
-          { default: () => "重新导出" },
-        ),
+        renderSummaryExportButton(row),
       );
     }
     const transcriptButton = renderTranscriptDownloadButton(row);
@@ -648,17 +655,17 @@ const generateSessionSummary = async () => {
   }
 };
 
-const exportSummary = async (row: LiveRecord) => {
+const exportSummary = async (row: LiveRecord, target: LiveSummaryExportTarget) => {
   if (summaryExportingIds.value.includes(row.id)) return;
 
   summaryExportingIds.value = [...summaryExportingIds.value, row.id];
   try {
-    await recordHistoryApi.exportLiveSummary(row.id);
+    await recordHistoryApi.exportLiveSummary(row.id, target);
     row.ai_summary_status = "completed";
     row.ai_summary_error = "";
     row.ai_summary_time = Date.now();
     notice.success({
-      title: "已重新导出直播总结",
+      title: `已重新导出直播总结到${target === "feishu" ? "飞书" : "Notion"}`,
       duration: 1500,
     });
   } catch (error: any) {
