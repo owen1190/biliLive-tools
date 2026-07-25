@@ -84,7 +84,10 @@ export async function exportExistingLiveSummaryWithDeps(
   };
 
   try {
-    await deps.exportSummary(record.ai_summary, input, summaryConfig, target);
+    const exportPromise = target
+      ? deps.exportSummary(record.ai_summary, input, summaryConfig, target)
+      : deps.exportSummary(record.ai_summary, input, summaryConfig);
+    await exportPromise;
     deps.updateRecord({
       id: recordId,
       ai_summary_status: "completed",
