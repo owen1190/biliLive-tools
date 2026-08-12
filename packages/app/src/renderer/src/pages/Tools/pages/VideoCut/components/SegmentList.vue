@@ -116,19 +116,41 @@
   <n-modal
     v-model:show="cutEditVisible"
     preset="dialog"
-    title="编辑片段名称"
+    title="编辑片段"
     :show-icon="false"
     :closable="false"
     auto-focus
   >
-    <n-input
-      v-model:value="tempCutName"
-      placeholder="请输入片段名称"
-      @keydown.enter="confirmEditCutName"
-    ></n-input>
+    <n-form label-placement="left" label-width="72">
+      <n-form-item label="片段名称">
+        <n-input
+          v-model:value="tempCutName"
+          placeholder="请输入片段名称"
+          @keydown.enter="confirmEditCut"
+        />
+      </n-form-item>
+      <n-form-item label="片段起点">
+        <n-input
+          v-model:value="tempCutStart"
+          placeholder="例如 00:01:30.500 或 90.5"
+          @keydown.enter="confirmEditCut"
+        />
+      </n-form-item>
+      <n-form-item
+        label="片段终点"
+        :feedback="timeEditError"
+        :validation-status="timeEditError ? 'error' : undefined"
+      >
+        <n-input
+          v-model:value="tempCutEnd"
+          placeholder="例如 00:02:00 或 120"
+          @keydown.enter="confirmEditCut"
+        />
+      </n-form-item>
+    </n-form>
     <template #action>
       <n-button @click="cutEditVisible = false">取消</n-button>
-      <n-button type="primary" @click="confirmEditCutName">确定</n-button>
+      <n-button type="primary" @click="confirmEditCut">确定</n-button>
     </template>
   </n-modal>
 
@@ -273,18 +295,60 @@ const {
 const toggleChecked = (id: string) => {
   toggleSegment(id);
 };
-// 编辑片段名称
+// 编辑片段
 const cutEditVisible = ref(false);
 const tempCutName = ref("");
+const tempCutStart = ref("");
+const tempCutEnd = ref("");
+const timeEditError = ref("");
+
+const formatEditableTime = (seconds: number) => {
+  const totalMilliseconds = Math.round(seconds * 1000);
+  const hours = Math.floor(totalMilliseconds / 3_600_000);
+  const minutes = Math.floor((totalMilliseconds % 3_600_000) / 60_000);
+  const wholeSeconds = Math.floor((totalMilliseconds % 60_000) / 1000);
+  const milliseconds = totalMilliseconds % 1000;
+  const base = [hours, minutes, wholeSeconds]
+    .map((value) => String(value).padStart(2, "0"))
+    .join(":");
+  return milliseconds ? `${base}.${String(milliseconds).padStart(3, "0")}` : base;
+};
+
+const parseEditableTime = (value: string) => {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+
+  if (!normalized.includes(":")) {
+    const seconds = Number(normalized);
+    return Number.isFinite(seconds) ? seconds : null;
+  }
+
+  const parts = normalized.split(":");
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => part.trim() === "")) {
+    return null;
+  }
+
+  const values = parts.map(Number);
+  if (values.some((part) => !Number.isFinite(part) || part < 0)) return null;
+
+  const [hours, minutes, seconds] =
+    values.length === 3 ? values : [0, values[0], values[1]];
+  if (minutes >= 60 || seconds >= 60) return null;
+
+  return hours * 3600 + minutes * 60 + seconds;
+};
 
 /**
- * 编辑片段名称
+ * 编辑片段
  */
 const editCut = (id: string) => {
   const cut = cuts.value.find((c) => c.id === id);
   if (!cut) return;
   cutEditVisible.value = true;
   tempCutName.value = cut.name;
+  tempCutStart.value = formatEditableTime(cut.start);
+  tempCutEnd.value = formatEditableTime(cut.end);
+  timeEditError.value = "";
   selectCutId.value = id;
 };
 
@@ -299,11 +363,29 @@ const rename = () => {
 };
 
 /**
- * 确认编辑片段名称
+ * 确认编辑片段
  */
-const confirmEditCutName = () => {
+const confirmEditCut = () => {
   if (!selectCutId.value) return;
-  updateSegment(selectCutId.value, { name: tempCutName.value });
+  const start = parseEditableTime(tempCutStart.value);
+  const parsedEnd = parseEditableTime(tempCutEnd.value);
+
+  if (start === null || parsedEnd === null || start < 0) {
+    timeEditError.value = "请输入有效时间，例如 00:01:30.500 或 90.5";
+    return;
+  }
+  if (parsedEnd <= start) {
+    timeEditError.value = "片段终点必须晚于起点";
+    return;
+  }
+  if (parsedEnd > videoInstance.value.duration + 0.001) {
+    timeEditError.value = `片段终点不能超过视频时长 ${formatEditableTime(videoInstance.value.duration)}`;
+    return;
+  }
+
+  const end = Math.min(parsedEnd, videoInstance.value.duration);
+  updateSegment(selectCutId.value, { name: tempCutName.value, start, end });
+  timeEditError.value = "";
   cutEditVisible.value = false;
 };
 
