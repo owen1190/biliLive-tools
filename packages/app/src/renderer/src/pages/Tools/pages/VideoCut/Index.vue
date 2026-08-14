@@ -148,6 +148,7 @@ import { useDanmu } from "./composables/useDanmu";
 import { useWaveform } from "./composables/useWaveform";
 import { useChapter } from "./composables/useChapter";
 import { useKeyboardShortcuts } from "./composables/useKeyboardShortcuts";
+import { convertAsrTranscriptToSrt } from "./utils/transcriptToSrt";
 
 import type { DanmuConfig } from "@biliLive-tools/types";
 
@@ -233,7 +234,7 @@ const projectMenuItems = computed(() => {
   const list = [
     { label: "导入项目文件", key: "importProject" },
     { label: "加载弹幕", key: "importDanmu" },
-    { label: "加载字幕", key: "importGlobalSubtitle" },
+    { label: "加载字幕（SRT / ASR转写TXT）", key: "importGlobalSubtitle" },
     ...projectMenuOptions.value,
     { label: "关闭", key: "closeVideo", disabled: !files.value.videoPath },
   ];
@@ -473,29 +474,32 @@ const handleProjectMenuClick = async (key?: string | number) => {
  */
 const importGlobalSubtitle = async () => {
   const selectedFiles = await showFileDialog({
-    extensions: ["srt"],
+    extensions: ["srt", "txt"],
   });
   if (!selectedFiles || selectedFiles.length === 0) return;
 
   const filePath = selectedFiles[0];
   try {
-    // 读取 SRT 文件内容
+    // 读取 SRT 或 ASR 转写文件内容
     const content = await commonApi.readDanma(filePath);
+    const subtitleContent = filePath.toLowerCase().endsWith(".txt")
+      ? convertAsrTranscriptToSrt(content)
+      : content;
 
     // 设置全局字幕
-    subtitleStore.setGlobal(content);
+    subtitleStore.setGlobal(subtitleContent);
 
     // 更新视频播放器的字幕显示
     updatePlayerSubtitles();
 
     notice.success({
-      title: "全局字幕导入成功",
+      title: filePath.toLowerCase().endsWith(".txt") ? "ASR 转写已转换并导入" : "全局字幕导入成功",
       duration: 2000,
     });
   } catch (error) {
-    console.error("导入全局字幕失败:", error);
+    console.error("导入字幕失败:", error);
     notice.error({
-      title: "全局字幕导入失败",
+      title: "字幕导入失败",
       content: (error as Error).message,
       duration: 3000,
     });

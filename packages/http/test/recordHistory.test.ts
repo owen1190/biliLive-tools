@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockPathExists,
+  mockReadFile,
   mockStat,
   mockSetFile,
   mockGetRecordById,
@@ -10,6 +11,7 @@ const {
   mockExportExistingLiveSummary,
 } = vi.hoisted(() => ({
   mockPathExists: vi.fn(),
+  mockReadFile: vi.fn(),
   mockStat: vi.fn(),
   mockSetFile: vi.fn((filePath: string) =>
     filePath.endsWith(".transcript.txt") ? "transcript-file-id" : "video-file-id",
@@ -44,6 +46,7 @@ vi.mock("@koa/router", () => {
 vi.mock("fs-extra", () => ({
   default: {
     pathExists: mockPathExists,
+    readFile: mockReadFile,
     stat: mockStat,
   },
 }));
@@ -121,6 +124,34 @@ describe("record history routes", () => {
     );
   });
 
+  it("失败状态下可以读取已保存的 ASR 转写文本", async () => {
+    const transcriptFile = "/records/live.transcript.txt";
+    mockGetRecordById.mockReturnValue({
+      id: 1,
+      ai_summary_status: "error",
+      ai_transcript_file: transcriptFile,
+    });
+    mockPathExists.mockImplementation(async (filePath: string) => filePath === transcriptFile);
+    mockReadFile.mockResolvedValue("[00:00:00-00:00:03] 已完成的 ASR 转写");
+
+    const ctx: any = {
+      params: { id: "1" },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/transcript/:id", "GET")(ctx, async () => {});
+
+    expect(ctx.body).toEqual({
+      code: 200,
+      data: {
+        content: "[00:00:00-00:00:03] 已完成的 ASR 转写",
+        filePath: transcriptFile,
+        fileId: "transcript-file-id",
+      },
+    });
+  });
+
   it("普通直播总结入口保持单条录制总结", async () => {
     const videoFile = "/records/live.flv";
     mockQueryRecord.mockReturnValue({
@@ -189,6 +220,85 @@ describe("record history routes", () => {
       expect.objectContaining({
         recordId: 1,
         customPrompt: "请重点总结带货节奏",
+      }),
+      { force: true },
+    );
+  });
+
+  it("LLM 失败重试时会同时传递视频和已保存转写，由任务优先复用转写", async () => {
+    const videoFile = "/records/live.flv";
+    const transcriptFile = "/records/live.transcript.txt";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "error",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({
+      id: 1,
+      video_file: videoFile,
+      ai_transcript_file: transcriptFile,
+    });
+    mockPathExists.mockResolvedValue(true);
+
+    const ctx: any = {
+      params: { id: "1" },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: 1,
+        videoFile,
+        transcriptFile,
+        summaryMode: "record",
+      }),
+      { force: true },
+    );
+  });
+
+  it("旧失败记录未登记转写路径时会发现视频旁的同名转写", async () => {
+    const videoFile = "/records/live.flv";
+    const transcriptFile = "/records/live.transcript.txt";
+    mockQueryRecord.mockReturnValue({
+      id: 1,
+      title: "直播标题",
+      record_start_time: 1781105107602,
+      ai_summary_status: "error",
+      streamer: {
+        name: "主播",
+        room_id: "123",
+        platform: "Bilibili",
+      },
+    });
+    mockGetRecordById.mockReturnValue({
+      id: 1,
+      video_file: videoFile,
+    });
+    mockPathExists.mockImplementation(async (filePath: string) =>
+      [videoFile, transcriptFile].includes(filePath),
+    );
+
+    const ctx: any = {
+      params: { id: "1" },
+      body: null,
+      status: 200,
+    };
+
+    await getHandler("/record-history/:id/live-summary", "POST")(ctx, async () => {});
+
+    expect(mockAddLiveSummaryTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoFile,
+        transcriptFile,
       }),
       { force: true },
     );

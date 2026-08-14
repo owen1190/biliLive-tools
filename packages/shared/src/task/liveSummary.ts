@@ -168,7 +168,8 @@ async function resolveExistingTranscriptFile(transcriptFile?: string) {
 }
 
 function getTranscriptOutputBase(filePath: string) {
-  return path.basename(filePath)
+  return path
+    .basename(filePath)
     .replace(/\.session\.transcript\.txt$/i, "")
     .replace(/\.transcript\.txt$/i, "")
     .replace(/\.[^.]+$/, "");
@@ -346,8 +347,17 @@ export class LiveSummaryTask extends AbstractTask {
     const sessionCandidates = targetRecord.live_id
       ? recordHistoryService.listSameLiveRecords(targetRecord)
       : [];
+    const mergedSessionCandidates = sessionCandidates.map((clip) =>
+      clip.id === targetClip.id
+        ? {
+            ...clip,
+            video_file: targetClip.video_file || clip.video_file,
+            ai_transcript_file: targetClip.ai_transcript_file || clip.ai_transcript_file,
+          }
+        : clip,
+    );
     const sameLiveClips = targetRecord.live_id
-      ? resolveLiveSummarySessionClips(targetClip, sessionCandidates)
+      ? resolveLiveSummarySessionClips(targetClip, mergedSessionCandidates)
       : [targetClip];
     const sessionClips = shouldSummarizeSession ? sameLiveClips : [targetClip];
     if (!sessionClips.length) {
@@ -374,6 +384,7 @@ export class LiveSummaryTask extends AbstractTask {
     try {
       const transcriptParts: LiveSummarySessionTranscriptPart[] = [];
       let transcript = "";
+      let savedTranscriptFile: string | undefined;
       const sourceClips = await Promise.all(
         sessionClips.map(async (clip) => ({
           clip,
@@ -381,14 +392,13 @@ export class LiveSummaryTask extends AbstractTask {
           transcriptFile: await resolveExistingTranscriptFile(clip.ai_transcript_file),
         })),
       );
-      const hasExistingVideo = sourceClips.some((item) => item.videoFile);
-      const existingSessionTranscript =
-        shouldSummarizeSession && !hasExistingVideo
-          ? sourceClips.find((item) => isSessionTranscriptFile(item.transcriptFile ?? undefined))
-              ?.transcriptFile
-          : null;
+      const existingSessionTranscript = shouldSummarizeSession
+        ? sourceClips.find((item) => isSessionTranscriptFile(item.transcriptFile ?? undefined))
+            ?.transcriptFile
+        : null;
 
       if (existingSessionTranscript) {
+        savedTranscriptFile = existingSessionTranscript;
         transcript = await fs.readFile(existingSessionTranscript, "utf8");
         logger.info("复用已保存的整场 ASR 转写文本", {
           taskId: this.taskId,
@@ -399,12 +409,15 @@ export class LiveSummaryTask extends AbstractTask {
       } else {
         let asr: ReturnType<typeof createASRProvider> | undefined;
         for (let index = 0; index < sessionClips.length; index++) {
-          const { clip, videoFile, transcriptFile: savedTranscriptFile } = sourceClips[index];
-          // 视频优先；只有视频不存在时，才允许使用片段级 ASR 文本。
-          const transcriptFile =
-            videoFile || isSessionTranscriptFile(savedTranscriptFile ?? undefined)
-              ? null
-              : savedTranscriptFile;
+          const {
+            clip,
+            videoFile,
+            transcriptFile: existingClipTranscriptFile,
+          } = sourceClips[index];
+          // 已完成 ASR 时优先复用转写，只有转写不存在时才重新处理视频。
+          const transcriptFile = isSessionTranscriptFile(existingClipTranscriptFile ?? undefined)
+            ? null
+            : existingClipTranscriptFile;
 
           this.custsomProgressMsg = `正在处理语音 ${index + 1}/${sessionClips.length}`;
           this.progress = 15 + Math.floor((index / sessionClips.length) * 50);
@@ -476,7 +489,6 @@ export class LiveSummaryTask extends AbstractTask {
         throw new Error("ASR 未识别到有效语音内容");
       }
 
-      let savedTranscriptFile: string | undefined;
       if (summaryConfig.saveTranscript) {
         const transcriptSuffix = shouldSummarizeSession
           ? ".session.transcript.txt"
@@ -494,6 +506,11 @@ export class LiveSummaryTask extends AbstractTask {
           `${getTranscriptOutputBase(outputSourceFile)}${transcriptSuffix}`,
         );
         await fs.writeFile(savedTranscriptFile, transcript);
+        // ASR 是独立阶段，先持久化检查点；后续 LLM/导出失败时可直接从这里重试。
+        recordHistoryService.update({
+          id: this.options.recordId,
+          ai_transcript_file: savedTranscriptFile,
+        });
         logger.info("直播总结转写文本已保存", {
           taskId: this.taskId,
           transcriptFile: savedTranscriptFile,
@@ -621,26 +638,30 @@ export class LiveSummaryTask extends AbstractTask {
 }
 
 export async function exportExistingLiveSummary(recordId: number, target?: SummaryExportTarget) {
-  return exportExistingLiveSummaryWithDeps(recordId, {
-    getRecord: (id) => {
-      const record = recordHistoryService.query({
-        id,
-        include: {
-          streamer: true,
-        },
-      });
-      if (!record) return undefined;
-      return {
-        ...record,
-        streamer: record.streamer || undefined,
-      };
+  return exportExistingLiveSummaryWithDeps(
+    recordId,
+    {
+      getRecord: (id) => {
+        const record = recordHistoryService.query({
+          id,
+          include: {
+            streamer: true,
+          },
+        });
+        if (!record) return undefined;
+        return {
+          ...record,
+          streamer: record.streamer || undefined,
+        };
+      },
+      getSummaryConfig: () => appConfig.getAll().ai.liveSummary,
+      getEnabledTargetNames: getEnabledSummaryExportTargetNames,
+      exportSummary: exportSummaryToTargets,
+      updateRecord: (data) => recordHistoryService.update(data),
+      logSuccess: (data) => logger.info("已重新导出直播总结", data),
     },
-    getSummaryConfig: () => appConfig.getAll().ai.liveSummary,
-    getEnabledTargetNames: getEnabledSummaryExportTargetNames,
-    exportSummary: exportSummaryToTargets,
-    updateRecord: (data) => recordHistoryService.update(data),
-    logSuccess: (data) => logger.info("已重新导出直播总结", data),
-  }, target);
+    target,
+  );
 }
 
 export function addLiveSummaryTask(

@@ -169,10 +169,16 @@ router.post("/readDanma", async (ctx) => {
   const { filepath } = ctx.request.body as {
     filepath: string;
   };
-  // 只允许读取ass或xml文件
-  if (!filepath.endsWith(".ass") && !filepath.endsWith(".xml") && !filepath.endsWith(".srt")) {
+  const normalizedFilepath = filepath.toLowerCase();
+  // 只允许读取弹幕、字幕或 ASR 转写文件
+  if (
+    !normalizedFilepath.endsWith(".ass") &&
+    !normalizedFilepath.endsWith(".xml") &&
+    !normalizedFilepath.endsWith(".srt") &&
+    !normalizedFilepath.endsWith(".transcript.txt")
+  ) {
     ctx.status = 400;
-    ctx.body = "文件不是ass、xml或srt格式";
+    ctx.body = "文件不是ass、xml、srt或ASR转写txt格式";
     return;
   }
 

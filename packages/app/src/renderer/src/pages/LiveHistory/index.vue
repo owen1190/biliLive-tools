@@ -77,6 +77,20 @@
       </n-card>
     </n-modal>
 
+    <n-modal v-model:show="transcriptModalVisible">
+      <n-card
+        style="width: 820px; max-width: 90vw; max-height: 80vh"
+        title="ASR 转写文本"
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+      >
+        <n-spin :show="transcriptLoading">
+          <pre class="transcript-content">{{ currentTranscript }}</pre>
+        </n-spin>
+      </n-card>
+    </n-modal>
+
     <n-modal v-model:show="promptModalVisible" :mask-closable="!promptModalSubmitting">
       <n-card
         style="width: 640px; max-width: 90vw"
@@ -202,6 +216,9 @@ const loading = ref<boolean>(false);
 const hasQueried = ref<boolean>(false);
 const summaryModalVisible = ref(false);
 const currentSummary = ref("");
+const transcriptModalVisible = ref(false);
+const currentTranscript = ref("");
+const transcriptLoading = ref(false);
 const summaryGeneratingIds = ref<number[]>([]);
 const summaryExportingIds = ref<number[]>([]);
 const sessionSummaryGenerating = ref(false);
@@ -410,6 +427,27 @@ const renderTranscriptDownloadButton = (row: LiveRecord) => {
   );
 };
 
+const renderTranscriptViewButton = (row: LiveRecord) => {
+  if (!row.ai_transcript_file) return null;
+  return h(
+    NButton,
+    {
+      size: "small",
+      text: true,
+      type: "primary",
+      onClick: () => showTranscript(row.id),
+    },
+    { default: () => "查看转写" },
+  );
+};
+
+const appendTranscriptActions = (actions: VNode[], row: LiveRecord) => {
+  const viewButton = renderTranscriptViewButton(row);
+  const downloadButton = renderTranscriptDownloadButton(row);
+  if (viewButton) actions.push(viewButton);
+  if (downloadButton) actions.push(downloadButton);
+};
+
 const renderSummaryExportButton = (row: LiveRecord) =>
   h(
     NDropdown,
@@ -449,10 +487,7 @@ const renderSummaryCell = (row: LiveRecord) => {
         { default: () => "查看" },
       ),
     ];
-    const transcriptButton = renderTranscriptDownloadButton(row);
-    if (transcriptButton) {
-      actions.push(transcriptButton);
-    }
+    appendTranscriptActions(actions, row);
     actions.push(
       renderSummaryExportButton(row),
       h(
@@ -472,6 +507,7 @@ const renderSummaryCell = (row: LiveRecord) => {
         style: {
           display: "flex",
           alignItems: "center",
+          flexWrap: "wrap",
           gap: "8px",
         },
       },
@@ -504,10 +540,7 @@ const renderSummaryCell = (row: LiveRecord) => {
         renderSummaryExportButton(row),
       );
     }
-    const transcriptButton = renderTranscriptDownloadButton(row);
-    if (transcriptButton) {
-      actions.push(transcriptButton);
-    }
+    appendTranscriptActions(actions, row);
     actions.push(
       h(
         NButton,
@@ -527,6 +560,7 @@ const renderSummaryCell = (row: LiveRecord) => {
         style: {
           display: "flex",
           alignItems: "center",
+          flexWrap: "wrap",
           gap: "8px",
         },
       },
@@ -549,6 +583,23 @@ const renderSummaryCell = (row: LiveRecord) => {
 const showSummary = (summary: string) => {
   currentSummary.value = summary;
   summaryModalVisible.value = true;
+};
+
+const showTranscript = async (id: number) => {
+  transcriptModalVisible.value = true;
+  transcriptLoading.value = true;
+  currentTranscript.value = "";
+  try {
+    const data = await recordHistoryApi.getTranscript(id);
+    currentTranscript.value = data.content;
+  } catch (error: any) {
+    transcriptModalVisible.value = false;
+    notice.error({
+      title: error?.message || String(error),
+    });
+  } finally {
+    transcriptLoading.value = false;
+  }
 };
 
 const buildPromptOptions = (prompt?: string) => {
@@ -867,6 +918,16 @@ const previewVideo = async (id: number) => {
   max-height: 60vh;
   overflow: auto;
   white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.transcript-content {
+  max-height: 60vh;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
   line-height: 1.7;
 }
 
