@@ -120,7 +120,10 @@ export async function getDanmaFileInfo(videoFilePath: string): Promise<{
   return res.data;
 }
 
-export async function generateLiveSummary(id: number, options?: { prompt?: string }): Promise<{
+export async function generateLiveSummary(
+  id: number,
+  options?: { prompt?: string },
+): Promise<{
   code: number;
   data: {
     taskId?: string;
@@ -131,7 +134,10 @@ export async function generateLiveSummary(id: number, options?: { prompt?: strin
   return res.data;
 }
 
-export async function generateLiveSessionSummary(id: number, options?: { prompt?: string }): Promise<{
+export async function generateLiveSessionSummary(
+  id: number,
+  options?: { prompt?: string },
+): Promise<{
   code: number;
   data: {
     taskId?: string;
@@ -165,11 +171,17 @@ export async function downloadFile(id: number): Promise<string> {
 }
 
 export async function downloadTranscript(id: number): Promise<string> {
-  const { transcriptFileId } = await getFileInfo(id);
-  if (!transcriptFileId) {
-    throw new Error("ASR转写文本不存在");
-  }
-  return `${request.defaults.baseURL}/assets/download/${transcriptFileId}`;
+  const { fileId } = await getTranscript(id);
+  return `${request.defaults.baseURL}/assets/download/${fileId}`;
+}
+
+export async function getTranscript(id: number): Promise<{
+  content: string;
+  filePath: string;
+  fileId: string;
+}> {
+  const res = await request.get(`/record-history/transcript/${id}`);
+  return res.data.data;
 }
 
 export default {
@@ -178,6 +190,7 @@ export default {
   removeRecord,
   downloadFile,
   downloadTranscript,
+  getTranscript,
   getFileInfo,
   getDanmaFileInfo,
   generateLiveSummary,

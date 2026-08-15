@@ -64,13 +64,18 @@ router.get("/list", async (ctx) => {
     });
 
     // 为每条记录计算弹幕密度
-    const dataWithDensity = result.data.map((record) => ({
-      ...record,
-      danma_density:
-        record.danma_num && record.video_duration && record.video_duration > 0
-          ? Math.round((record.danma_num / record.video_duration) * 100) / 100 // 保留两位小数
-          : 0,
-    }));
+    const dataWithDensity = await Promise.all(
+      result.data.map(async (record) => ({
+        ...record,
+        ...(record.ai_summary_status === "error" && !record.ai_transcript_file
+          ? { ai_transcript_file: (await getTranscriptFile(record.id)) || undefined }
+          : {}),
+        danma_density:
+          record.danma_num && record.video_duration && record.video_duration > 0
+            ? Math.round((record.danma_num / record.video_duration) * 100) / 100 // 保留两位小数
+            : 0,
+      })),
+    );
 
     ctx.body = {
       code: 200,
@@ -154,8 +159,23 @@ const getVideoFile = async (id: number): Promise<string | null> => {
 
 const getTranscriptFile = async (id: number): Promise<string | null> => {
   const data = recordHistory.getRecordById(id);
-  if (!data?.ai_transcript_file) return null;
-  return (await fs.pathExists(data.ai_transcript_file)) ? data.ai_transcript_file : null;
+  if (!data) return null;
+  if (data.ai_transcript_file && (await fs.pathExists(data.ai_transcript_file))) {
+    return data.ai_transcript_file;
+  }
+
+  // 兼容旧版本：LLM 失败时转写已写入磁盘，但路径尚未登记到数据库。
+  if (data.video_file) {
+    const sidecarCandidates = [
+      replaceExtName(data.video_file, ".transcript.txt"),
+      replaceExtName(data.video_file, ".session.transcript.txt"),
+    ];
+    for (const candidate of sidecarCandidates) {
+      if (await fs.pathExists(candidate)) return candidate;
+    }
+  }
+
+  return null;
 };
 
 const createVideoFileResponse = async (videoFile: string) => {
@@ -222,6 +242,35 @@ const createTranscriptFileResponse = async (id: number) => {
 };
 
 /**
+ * 查看已保存的 ASR 转写文本
+ * @route GET /record-history/transcript/:id
+ */
+router.get("/transcript/:id", async (ctx) => {
+  const recordId = parseInt(ctx.params.id);
+  if (isNaN(recordId)) {
+    ctx.status = 400;
+    ctx.body = { code: 400, message: "记录ID不能为空且必须为数字" };
+    return;
+  }
+
+  const transcriptFile = await getTranscriptFile(recordId);
+  if (!transcriptFile) {
+    ctx.status = 404;
+    ctx.body = { code: 404, message: "ASR转写文本不存在" };
+    return;
+  }
+
+  ctx.body = {
+    code: 200,
+    data: {
+      content: await fs.readFile(transcriptFile, "utf8"),
+      filePath: transcriptFile,
+      fileId: fileCache.setFile(transcriptFile),
+    },
+  };
+});
+
+/**
  * 获取历史记录文件信息
  * @route GET /record-history/file/:id
  * @param {number} id - 记录ID
@@ -261,8 +310,7 @@ const addLiveSummaryRouteTask = async (
   const { id } = ctx.params;
   const recordId = parseInt(id);
   const requestBody = ctx.request?.body as { prompt?: unknown } | undefined;
-  const customPrompt =
-    typeof requestBody?.prompt === "string" ? requestBody.prompt.trim() : "";
+  const customPrompt = typeof requestBody?.prompt === "string" ? requestBody.prompt.trim() : "";
 
   if (!id || isNaN(recordId)) {
     ctx.status = 400;
