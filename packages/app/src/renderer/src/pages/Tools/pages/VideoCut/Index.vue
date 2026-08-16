@@ -475,6 +475,9 @@ const handleProjectMenuClick = async (key?: string | number) => {
 const importGlobalSubtitle = async () => {
   const selectedFiles = await showFileDialog({
     extensions: ["srt", "txt"],
+    defaultPath: files.value.originVideoPath
+      ? window.path.dirname(files.value.originVideoPath)
+      : undefined,
   });
   if (!selectedFiles || selectedFiles.length === 0) return;
 
