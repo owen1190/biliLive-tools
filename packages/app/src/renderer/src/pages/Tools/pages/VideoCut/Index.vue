@@ -148,7 +148,7 @@ import { useDanmu } from "./composables/useDanmu";
 import { useWaveform } from "./composables/useWaveform";
 import { useChapter } from "./composables/useChapter";
 import { useKeyboardShortcuts } from "./composables/useKeyboardShortcuts";
-import { convertAsrTranscriptToSrt } from "./utils/transcriptToSrt";
+import { clipSrtToTimeRange, convertAsrTranscriptToSrt } from "./utils/transcriptToSrt";
 
 import type { DanmuConfig } from "@biliLive-tools/types";
 
@@ -234,7 +234,7 @@ const projectMenuItems = computed(() => {
   const list = [
     { label: "导入项目文件", key: "importProject" },
     { label: "加载弹幕", key: "importDanmu" },
-    { label: "加载字幕（SRT / ASR转写TXT）", key: "importGlobalSubtitle" },
+    { label: "为当前切片加载字幕（SRT / ASR转写TXT）", key: "importGlobalSubtitle" },
     ...projectMenuOptions.value,
     { label: "关闭", key: "closeVideo", disabled: !files.value.videoPath },
   ];
@@ -473,6 +473,15 @@ const handleProjectMenuClick = async (key?: string | number) => {
  * 导入全局字幕
  */
 const importGlobalSubtitle = async () => {
+  const selectedSegment = segmentStore.selectedCut;
+  if (!selectedSegment) {
+    notice.error({
+      title: "请先选择一个切片",
+      duration: 2000,
+    });
+    return;
+  }
+
   const selectedFiles = await showFileDialog({
     extensions: ["srt", "txt"],
     defaultPath: files.value.originVideoPath
@@ -488,15 +497,22 @@ const importGlobalSubtitle = async () => {
     const subtitleContent = filePath.toLowerCase().endsWith(".txt")
       ? convertAsrTranscriptToSrt(content)
       : content;
+    const clippedSubtitleContent = clipSrtToTimeRange(
+      subtitleContent,
+      selectedSegment.start,
+      selectedSegment.end,
+    );
 
-    // 设置全局字幕
-    subtitleStore.setGlobal(subtitleContent);
+    // 字幕保留原视频时间轴，只绑定到当前切片；导出时再按切片起点归零。
+    subtitleStore.setForSegment(selectedSegment.id, clippedSubtitleContent);
 
     // 更新视频播放器的字幕显示
     updatePlayerSubtitles();
 
     notice.success({
-      title: filePath.toLowerCase().endsWith(".txt") ? "ASR 转写已转换并导入" : "全局字幕导入成功",
+      title: filePath.toLowerCase().endsWith(".txt")
+        ? "ASR 转写已按当前切片时间导入"
+        : "字幕已按当前切片时间导入",
       duration: 2000,
     });
   } catch (error) {

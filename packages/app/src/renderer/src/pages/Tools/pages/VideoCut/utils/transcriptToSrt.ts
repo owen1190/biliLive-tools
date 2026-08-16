@@ -1,3 +1,5 @@
+import SrtParser from "srt-parser-2";
+
 export interface TranscriptCue {
   start: number;
   end: number;
@@ -54,7 +56,7 @@ export function parseAsrTranscript(content: string): TranscriptCue[] {
     const end = parseTimestamp(match[5], match[6], match[7], match[8]);
     const text = match[9].trim();
 
-    if (end <= start) {
+    if (end < start) {
       throw new Error(`转写时间范围无效：${trimmedLine}`);
     }
     if (cues.length > 0 && start < cues[cues.length - 1].start) {
@@ -67,7 +69,17 @@ export function parseAsrTranscript(content: string): TranscriptCue[] {
     throw new Error("该 TXT 不包含字幕时间戳，无法转换为 SRT");
   }
 
-  return cues;
+  return cues.map((cue, index) => {
+    if (cue.end > cue.start) return cue;
+
+    // 部分 ASR 只输出秒级时间，短语音会被写成相同的起止秒。
+    // 优先显示到下一条字幕开始；末条则至少显示 1 秒。
+    const nextCueStart = cues.slice(index + 1).find((nextCue) => nextCue.start > cue.start)?.start;
+    return {
+      ...cue,
+      end: nextCueStart ?? cue.start + 1,
+    };
+  });
 }
 
 export function convertAsrTranscriptToSrt(content: string): string {
@@ -77,4 +89,33 @@ export function convertAsrTranscriptToSrt(content: string): string {
         `${index + 1}\n${formatSrtTimestamp(cue.start)} --> ${formatSrtTimestamp(cue.end)}\n${cue.text}`,
     )
     .join("\n\n");
+}
+
+export function clipSrtToTimeRange(content: string, start: number, end: number): string {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    throw new Error("当前切片时间范围无效");
+  }
+
+  const parser = new SrtParser();
+  const nodes = parser.fromSrt(content);
+  const clippedNodes = nodes
+    .filter((node) => node.endSeconds > start && node.startSeconds < end)
+    .map((node, index) => {
+      const clippedStart = Math.max(node.startSeconds, start);
+      const clippedEnd = Math.min(node.endSeconds, end);
+      return {
+        ...node,
+        id: String(index + 1),
+        startSeconds: clippedStart,
+        endSeconds: clippedEnd,
+        startTime: formatSrtTimestamp(clippedStart),
+        endTime: formatSrtTimestamp(clippedEnd),
+      };
+    });
+
+  if (clippedNodes.length === 0) {
+    throw new Error("所选切片时间范围内没有字幕");
+  }
+
+  return parser.toSrt(clippedNodes);
 }
