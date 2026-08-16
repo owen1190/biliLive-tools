@@ -43,17 +43,23 @@ export const showDirectoryDialog = async (options: {
   }
 };
 
-export const showFileDialog = async (options: { extensions: string[]; multi?: boolean }) => {
+export const showFileDialog = async (options: {
+  extensions: string[];
+  multi?: boolean;
+  defaultPath?: string;
+}) => {
   let files: string[] | undefined = [];
   if (window.isWeb) {
     files = await showDialog({
       type: "file",
       multi: options.multi,
       exts: options.extensions,
+      defaultPath: options.defaultPath,
     });
   } else {
     files = await window.api.openFile({
       multi: options.multi,
+      defaultPath: options.defaultPath,
       filters: [
         {
           name: "file",

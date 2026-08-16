@@ -51,8 +51,9 @@ router.get("/files", async (ctx) => {
   let root = params.path as string;
   const filterExts = ((params.exts as string) || "")
     .split("|")
+    .map((ext) => ext.trim().toLowerCase())
     .filter((ext) => ext)
-    .map((ext) => `.${ext}`);
+    .map((ext) => (ext.startsWith(".") ? ext : `.${ext}`));
   const type = params.type as string;
   const allFiles = filterExts.length === 0 || filterExts.includes(".*");
 
@@ -84,7 +85,11 @@ router.get("/files", async (ctx) => {
         const fileStat = await fs.stat(filePath);
         const type = fileStat.isDirectory() ? "directory" : "file";
 
-        if (type === "file" && !allFiles && !filterExts.includes(path.extname(name))) {
+        if (
+          type === "file" &&
+          !allFiles &&
+          !filterExts.includes(path.extname(name).toLowerCase())
+        ) {
           continue;
         }
         data.push({
