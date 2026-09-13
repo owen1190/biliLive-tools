@@ -104,8 +104,8 @@ export const hanldeInterruptTask = (taskId: string): void => {
 /**
  * 获取所有任务列表
  */
-export const handleListTask = () => {
-  return taskQueue.stringify(taskQueue.list());
+export const handleListTask = (options: { includeLogs?: boolean; type?: string } = {}) => {
+  return taskQueue.stringify(taskQueue.filter({ type: options.type }), options);
 };
 
 /**

@@ -43,11 +43,8 @@ const router = new Router({
 });
 
 router.get("/", async (ctx) => {
-  const type = ctx.query.type;
-  let data = handleListTask();
-  if (type) {
-    data = data.filter((item) => item.type === type);
-  }
+  const type = typeof ctx.query.type === "string" ? ctx.query.type : undefined;
+  const data = handleListTask({ type, includeLogs: ctx.query.includeLogs !== "false" });
 
   ctx.body = {
     list: data,

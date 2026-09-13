@@ -39,7 +39,7 @@
           <Refresh />
         </n-icon>
         <n-icon
-          v-if="item.logs?.length"
+          v-if="item.logCount || item.logs?.length"
           :size="20"
           class="btn pointer"
           title="任务日志"
@@ -205,7 +205,7 @@
       </span>
       <span>{{ item.custsomProgressMsg }}</span>
     </div>
-    <n-modal v-model:show="logVisible">
+    <n-modal v-if="logVisible" v-model:show="logVisible">
       <n-card
         style="width: 720px; max-width: 90vw; max-height: 70vh"
         :bordered="false"
@@ -213,14 +213,19 @@
         aria-modal="true"
         title="任务日志"
       >
-        <div class="task-logs">
-          <div v-for="logItem in item.logs" :key="`${logItem.time}-${logItem.message}`">
-            <span class="log-time">{{ new Date(logItem.time).toLocaleString() }}</span>
-            <span class="log-level" :class="`level-${logItem.level}`">{{ logItem.level }}</span>
-            <span>{{ logItem.message }}</span>
-            <pre v-if="logItem.detail">{{ logItem.detail }}</pre>
-          </div>
-        </div>
+        <n-spin :show="logsLoading">
+          <div v-if="logsError" class="logs-error">{{ logsError }}</div>
+          <n-virtual-list class="task-logs" :items="logRows" :item-size="28" item-resizable>
+            <template #default="{ item: row }">
+              <div>
+                <span class="log-time">{{ new Date(row.log.time).toLocaleString() }}</span>
+                <span class="log-level" :class="`level-${row.log.level}`">{{ row.log.level }}</span>
+                <span>{{ row.log.message }}</span>
+                <pre v-if="row.log.detail">{{ row.log.detail }}</pre>
+              </div>
+            </template>
+          </n-virtual-list>
+        </n-spin>
       </n-card>
     </n-modal>
   </div>
@@ -266,6 +271,33 @@ const props = withDefaults(defineProps<Props>(), {
 const item = computed(() => props.item);
 const isWeb = computed(() => window.isWeb);
 const logVisible = ref(false);
+const logs = shallowRef<NonNullable<Task["logs"]>>([]);
+const logsLoading = ref(false);
+const logsError = ref("");
+const logRows = computed(() => logs.value.map((log, key) => ({ key, log })));
+let logRequest = 0;
+
+watch([() => logVisible.value, () => item.value.logCount ?? item.value.logs?.length], async () => {
+  const request = ++logRequest;
+  if (!logVisible.value) {
+    logs.value = [];
+    logsLoading.value = false;
+    return;
+  }
+  logsLoading.value = true;
+  logsError.value = "";
+  try {
+    const detail = await taskApi.get(item.value.taskId);
+    if (request === logRequest) logs.value = detail.logs ?? [];
+  } catch (error) {
+    if (request === logRequest) logsError.value = `读取任务日志失败：${String(error)}`;
+  } finally {
+    if (request === logRequest) logsLoading.value = false;
+  }
+});
+onBeforeUnmount(() => {
+  logRequest++;
+});
 
 const confirm = useConfirm();
 const store = useQueueStore();
@@ -309,18 +341,18 @@ const statusMap: {
   },
 };
 
-const handleStart = (taskId: string, task: Task) => {
+const handleStart = async (taskId: string, task: Task) => {
   if (task.status === "paused") {
-    taskApi.resume(taskId);
+    await taskApi.resume(taskId);
   } else if (task.status === "pending") {
-    taskApi.start(taskId);
+    await taskApi.start(taskId);
   }
-  store.getQuenu();
+  await store.getQuenu();
 };
 
 const handlePause = async (taskId: string) => {
   await taskApi.pause(taskId);
-  store.getQuenu();
+  await store.getQuenu();
 };
 
 const handleKill = async (task: Task) => {
@@ -332,19 +364,19 @@ const handleKill = async (task: Task) => {
     });
     if (!status) return;
     if (!notSavePorcess) {
-      taskApi.interrupt(task.taskId);
+      await taskApi.interrupt(task.taskId);
     } else {
-      taskApi.cancel(task.taskId);
+      await taskApi.cancel(task.taskId);
     }
   } else {
     const [status] = await confirm.warning({
       content: "确定要中止任务吗？",
     });
     if (!status) return;
-    taskApi.cancel(task.taskId);
+    await taskApi.cancel(task.taskId);
   }
 
-  store.getQuenu();
+  await store.getQuenu();
 };
 
 const handleOpenDir = (item: Task) => {
@@ -369,12 +401,12 @@ const openExternal = (item: Task) => {
 
 const handleRemoveRecord = async (taskId: string) => {
   await taskApi.removeRecord(taskId);
-  store.getQuenu();
+  await store.getQuenu();
 };
 
 const handleRestart = async (taskId: string) => {
   await taskApi.restart(taskId);
-  store.getQuenu();
+  await store.getQuenu();
 };
 
 const notice = useNotification();
@@ -409,8 +441,8 @@ const addExtraVideoTask = async (taskId: string) => {
 
   const filePath = files?.[0];
   const partName = window.path.parse(filePath).name.slice(0, 80);
-  taskApi.addExtraVideoTask(taskId, filePath, partName);
-  store.getQuenu();
+  await taskApi.addExtraVideoTask(taskId, filePath, partName);
+  await store.getQuenu();
 };
 
 const editVideoPartName = async (taskId: string, item: Task) => {
@@ -420,8 +452,8 @@ const editVideoPartName = async (taskId: string, item: Task) => {
     defaultValue: item?.extra?.title,
   });
   if (!partName) return;
-  taskApi.editVideoPartName(taskId, partName);
-  store.getQuenu();
+  await taskApi.editVideoPartName(taskId, partName);
+  await store.getQuenu();
 };
 
 // const queryVideoStatus = async (taskId: string) => {
@@ -479,44 +511,45 @@ const editVideoPartName = async (taskId: string, item: Task) => {
       // padding: 5px;
     }
   }
-  .task-logs {
-    max-height: calc(70vh - 100px);
-    overflow: auto;
-    font-size: 13px;
-    line-height: 1.7;
+}
 
-    .log-time {
-      color: #888;
-      margin-right: 8px;
-    }
+.task-logs {
+  height: min(50vh, 480px);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 
-    .log-level {
-      display: inline-block;
-      width: 42px;
-      margin-right: 8px;
-      text-transform: uppercase;
-    }
+  .log-time {
+    color: #888;
+    margin-right: 8px;
+  }
 
-    .level-error {
-      color: #d03050;
-    }
+  .log-level {
+    display: inline-block;
+    width: 42px;
+    margin-right: 8px;
+    text-transform: uppercase;
+  }
 
-    .level-warn {
-      color: #f0a020;
-    }
+  .level-error {
+    color: #d03050;
+  }
 
-    .level-info {
-      color: #2080f0;
-    }
+  .level-warn {
+    color: #f0a020;
+  }
 
-    pre {
-      margin: 4px 0 8px;
-      padding: 8px;
-      white-space: pre-wrap;
-      word-break: break-all;
-      background: var(--bg-hover);
-      border-radius: 4px;
-    }
+  .level-info {
+    color: #2080f0;
+  }
+
+  pre {
+    margin: 4px 0 8px;
+    padding: 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--bg-hover);
+    border-radius: 4px;
   }
 }
 </style>

@@ -25,20 +25,23 @@
         >
       </div>
     </div>
-    <template v-if="displayQueue.length !== 0">
-      <div v-for="item in displayQueue" :key="item.taskId" class="item">
-        <Item
-          :item="item"
-          :show-progress="item.children ? false : true"
-          :show-info="item.children ? false : true"
-        />
-        <template v-if="item.children">
-          <div v-for="child in item.children" :key="child.taskId" class="sub-item">
-            <Item :item="child" />
-          </div>
-        </template>
-      </div>
-    </template>
+    <n-virtual-list
+      v-if="displayRows.length !== 0"
+      class="queue-list"
+      :items="displayRows"
+      :item-size="96"
+      item-resizable
+    >
+      <template #default="{ item: row }">
+        <div class="item" :class="{ 'sub-item': row.isChild }">
+          <Item
+            :item="row.task"
+            :show-progress="!row.task.children?.length"
+            :show-info="!row.task.children?.length"
+          />
+        </div>
+      </template>
+    </n-virtual-list>
     <template v-else>
       <h2>暂无任务，快去添加一个试试吧</h2>
     </template>
@@ -51,41 +54,27 @@ defineOptions({
 });
 import Item from "./components/item.vue";
 import { useQueueStore } from "@renderer/stores";
-import { deepRaw } from "@renderer/utils";
+import { groupByPid } from "@renderer/utils/taskQueue";
 import { taskApi } from "@renderer/apis";
 import { TaskType } from "@biliLive-tools/shared/enum.js";
-
-import type { Task } from "@renderer/types";
 
 const notice = useNotification();
 const store = useQueueStore();
 
 const queue = computed(() => store.queue);
 
-const groupByPid = (data: Task[]) => {
-  // 如果有pid对应得taskid，那么将这项加入到pid对应的task得children中
-  const list: Task[] = deepRaw(data);
-
-  for (const item of list) {
-    if (item.pid) {
-      const result = list.find((i) => i.taskId === item.pid);
-      if (result) {
-        if (result.children) {
-          result.children.push(item);
-        } else {
-          result.children = [item];
-        }
-      }
-    }
-  }
-  return list.filter((item) => !item.pid);
-};
-
 const displayQueue = computed(() => {
   const filterData = queue.value.filter((item) => selectedStatus.value.includes(item.status));
   const data = groupByPid(filterData);
   return data;
 });
+
+const displayRows = computed(() =>
+  displayQueue.value.flatMap((task) => [
+    { key: task.taskId, task, isChild: false },
+    ...(task.children ?? []).map((child) => ({ key: child.taskId, task: child, isChild: true })),
+  ]),
+);
 
 const typeOptions = ref([
   {
@@ -133,11 +122,12 @@ const selectedStatus = ref<string[]>([
 
 const handleRemoveEndTasks = async () => {
   const taskIds: string[] = [];
+  const byId = new Map(queue.value.map((item) => [item.taskId, item]));
   for (const item of queue.value) {
     if (item.status === "completed" || item.status === "canceled") {
       // 如果任务有pid，那么判断pid对应的任务未被完成或取消，那么不删除
       if (item.pid) {
-        const pTask = queue.value.find((i) => i.taskId === item.pid);
+        const pTask = byId.get(item.pid);
         if (pTask && !["completed", "canceled"].includes(pTask.status)) {
           continue;
         }
@@ -151,7 +141,7 @@ const handleRemoveEndTasks = async () => {
     title: "移除成功",
     duration: 1000,
   });
-  store.getQuenu();
+  await store.getQuenu();
 };
 
 const handlePauseTasks = async () => {
@@ -160,29 +150,39 @@ const handlePauseTasks = async () => {
       await taskApi.pause(item.taskId);
     }
   }
-  store.getQuenu();
+  await store.getQuenu();
 };
 
-let intervalId: NodeJS.Timeout | null = null;
-const createInterval = () => {
-  if (intervalId) return;
-  const interval = window.isWeb ? 2000 : 1000;
-  intervalId = setInterval(() => {
-    store.getQuenu();
-  }, interval);
-};
-function cleanInterval() {
-  intervalId && clearInterval(intervalId);
-  intervalId = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
+let active = false;
+let polling = false;
+async function pollQueue() {
+  if (!active || polling) return;
+  polling = true;
+  try {
+    if (!document.hidden) await store.getQuenu();
+  } catch (error) {
+    console.error("刷新任务队列失败", error);
+  } finally {
+    polling = false;
+    if (active) timer = setTimeout(pollQueue, window.isWeb ? 2000 : 1000);
+  }
+}
+function stopPolling() {
+  active = false;
+  if (timer) clearTimeout(timer);
+  timer = null;
 }
 
 onDeactivated(() => {
-  cleanInterval();
+  stopPolling();
 });
 
+onBeforeUnmount(stopPolling);
+
 onActivated(() => {
-  store.getQuenu();
-  createInterval();
+  active = true;
+  void pollQueue();
 });
 </script>
 
@@ -191,14 +191,17 @@ onActivated(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  .queue-list {
+    height: calc(100dvh - 120px);
+    min-height: 200px;
+  }
   .item {
     border-bottom: 1px solid #eee;
     padding: 10px 5px;
     padding-top: 0;
-
-    .sub-item {
-      margin-left: 15px;
-    }
+  }
+  .sub-item {
+    padding-left: 20px;
   }
 }
 </style>

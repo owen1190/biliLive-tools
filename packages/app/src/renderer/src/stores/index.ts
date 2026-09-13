@@ -1,4 +1,4 @@
-import { cloneDeep, isArray } from "lodash-es";
+import { cloneDeep } from "lodash-es";
 import { v4 as uuid } from "uuid";
 import { defineStore, storeToRefs } from "pinia";
 import { DanmuPreset, BiliupPreset, AppConfig } from "@biliLive-tools/types";
@@ -12,6 +12,7 @@ import {
   commonApi,
 } from "@renderer/apis";
 import { useSubtitles } from "./subtitles";
+import { createQueueLoader } from "@renderer/utils/taskQueue";
 
 import type { Task } from "@renderer/types";
 
@@ -185,21 +186,23 @@ export const useUploadPreset = defineStore("uploadPreset", () => {
 
 export const useQueueStore = defineStore("queue", () => {
   const runningTaskNum = ref(0);
-  const queue = ref<Task[]>([]);
+  const queue = shallowRef<Task[]>([]);
   const params = ref({ type: "" });
   let eventSource: EventSource | null = null;
   let checkTimer: number | null = null;
 
-  const getQuenu = async () => {
-    const res = await taskApi.list(params.value);
-    // 为了web的兼容性考虑
-    if (isArray(res)) {
-      queue.value = res.reverse();
-    } else {
-      queue.value = res.list.reverse();
-      // runningTaskNum.value = res.runningTaskNum;
-    }
-  };
+  const getQuenu = createQueueLoader(
+    async (type) => {
+      const res = await taskApi.list({ type, includeLogs: false });
+      // 兼容旧版服务返回数组。
+      const tasks: Task[] = Array.isArray(res) ? res : res.list;
+      return tasks.slice().reverse();
+    },
+    () => params.value.type,
+    (tasks) => {
+      queue.value = tasks;
+    },
+  );
   const setRunningTaskNum = (num: number) => {
     runningTaskNum.value = num;
   };
@@ -232,9 +235,9 @@ export const useQueueStore = defineStore("queue", () => {
   };
 
   watch(
-    () => params.value,
+    () => params.value.type,
     () => {
-      getQuenu();
+      getQuenu().catch(console.error);
     },
   );
 

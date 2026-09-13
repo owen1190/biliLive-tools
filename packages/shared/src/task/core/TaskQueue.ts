@@ -113,7 +113,7 @@ export class TaskQueue {
   /**
    * 将任务序列化为可传输对象
    */
-  stringify(item: AbstractTask[]) {
+  stringify(item: AbstractTask[], options: { includeLogs?: boolean } = {}) {
     return item.map((task) => {
       return {
         pid: task.pid,
@@ -129,7 +129,8 @@ export class TaskQueue {
         endTime: task.endTime,
         custsomProgressMsg: task.custsomProgressMsg,
         error: task.error ? String(task.error) : "",
-        logs: task.logs,
+        logs: options.includeLogs === false ? undefined : task.logs,
+        logCount: task.logs.length,
         duration: task.getDuration(),
         extra: task.extra,
       };

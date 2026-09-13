@@ -17,8 +17,9 @@ import type { DetectionConfig } from "music-segment-detector";
  */
 const list = async (params: {
   type?: string;
+  includeLogs?: boolean;
 }): Promise<{ list: Task[]; runningTaskNum: number }> => {
-  const res = await request.get(`/task`, { params });
+  const res = await request.get(`/task`, { params, timeout: 15000 });
   return res.data;
 };
 
