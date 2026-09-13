@@ -148,6 +148,7 @@ import { useDanmu } from "./composables/useDanmu";
 import { useWaveform } from "./composables/useWaveform";
 import { useChapter } from "./composables/useChapter";
 import { useKeyboardShortcuts } from "./composables/useKeyboardShortcuts";
+import { clipSrtToTimeRange, convertAsrTranscriptToSrt } from "./utils/transcriptToSrt";
 
 import type { DanmuConfig } from "@biliLive-tools/types";
 
@@ -233,7 +234,7 @@ const projectMenuItems = computed(() => {
   const list = [
     { label: "导入项目文件", key: "importProject" },
     { label: "加载弹幕", key: "importDanmu" },
-    { label: "加载字幕", key: "importGlobalSubtitle" },
+    { label: "为当前切片加载字幕（SRT / ASR转写TXT）", key: "importGlobalSubtitle" },
     ...projectMenuOptions.value,
     { label: "关闭", key: "closeVideo", disabled: !files.value.videoPath },
   ];
@@ -472,30 +473,52 @@ const handleProjectMenuClick = async (key?: string | number) => {
  * 导入全局字幕
  */
 const importGlobalSubtitle = async () => {
+  const selectedSegment = segmentStore.selectedCut;
+  if (!selectedSegment) {
+    notice.error({
+      title: "请先选择一个切片",
+      duration: 2000,
+    });
+    return;
+  }
+
   const selectedFiles = await showFileDialog({
-    extensions: ["srt"],
+    extensions: ["srt", "txt"],
+    defaultPath: files.value.originVideoPath
+      ? window.path.dirname(files.value.originVideoPath)
+      : undefined,
   });
   if (!selectedFiles || selectedFiles.length === 0) return;
 
   const filePath = selectedFiles[0];
   try {
-    // 读取 SRT 文件内容
+    // 读取 SRT 或 ASR 转写文件内容
     const content = await commonApi.readDanma(filePath);
+    const subtitleContent = filePath.toLowerCase().endsWith(".txt")
+      ? convertAsrTranscriptToSrt(content)
+      : content;
+    const clippedSubtitleContent = clipSrtToTimeRange(
+      subtitleContent,
+      selectedSegment.start,
+      selectedSegment.end,
+    );
 
-    // 设置全局字幕
-    subtitleStore.setGlobal(content);
+    // 字幕保留原视频时间轴，只绑定到当前切片；导出时再按切片起点归零。
+    subtitleStore.setForSegment(selectedSegment.id, clippedSubtitleContent);
 
     // 更新视频播放器的字幕显示
     updatePlayerSubtitles();
 
     notice.success({
-      title: "全局字幕导入成功",
+      title: filePath.toLowerCase().endsWith(".txt")
+        ? "ASR 转写已按当前切片时间导入"
+        : "字幕已按当前切片时间导入",
       duration: 2000,
     });
   } catch (error) {
-    console.error("导入全局字幕失败:", error);
+    console.error("导入字幕失败:", error);
     notice.error({
-      title: "全局字幕导入失败",
+      title: "字幕导入失败",
       content: (error as Error).message,
       duration: 3000,
     });

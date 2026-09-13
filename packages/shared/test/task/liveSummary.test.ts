@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   return {
     MockSummaryExportError,
     createASRProvider: vi.fn(),
+    sendMessage: vi.fn(),
     exportSummaryToTargets: vi.fn(),
     getEnabledSummaryExportTargetNames: vi.fn(),
     getModel: vi.fn(),
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => {
     remove: vi.fn(),
     pathExists: vi.fn(),
     readFile: vi.fn(),
+    writeFile: vi.fn(),
     logger: {
       info: vi.fn(),
       error: vi.fn(),
@@ -46,7 +48,7 @@ vi.mock("fs-extra", () => ({
     remove: mocks.remove,
     pathExists: mocks.pathExists,
     readFile: mocks.readFile,
-    writeFile: vi.fn(),
+    writeFile: mocks.writeFile,
   },
 }));
 
@@ -70,7 +72,7 @@ vi.mock("../../src/config.js", () => ({
           llmModelId: "llm-1",
           prompt: "默认提示词",
           maxInputLength: 24000,
-          saveTranscript: false,
+          saveTranscript: true,
           exportTargets: {
             feishu: {
               enabled: true,
@@ -103,10 +105,7 @@ vi.mock("../../src/db/index.js", () => ({
 vi.mock("../../src/ai/index.js", () => ({
   createASRProvider: mocks.createASRProvider,
   OpenAICompatibleLLM: vi.fn().mockImplementation(() => ({
-    sendMessage: vi.fn().mockResolvedValue({
-      content: "总结内容",
-      usage: {},
-    }),
+    sendMessage: mocks.sendMessage,
   })),
 }));
 
@@ -147,6 +146,11 @@ describe("LiveSummaryTask", () => {
     mocks.readFile.mockResolvedValue("已保存的 ASR 转写内容");
     mocks.ensureDir.mockResolvedValue(undefined);
     mocks.remove.mockResolvedValue(undefined);
+    mocks.writeFile.mockResolvedValue(undefined);
+    mocks.sendMessage.mockResolvedValue({
+      content: "总结内容",
+      usage: {},
+    });
     mocks.spawn.mockImplementation(() => {
       const child = new EventEmitter() as EventEmitter & {
         stderr: EventEmitter;
@@ -259,7 +263,7 @@ describe("LiveSummaryTask", () => {
     );
   });
 
-  it("prefers the video over a saved transcript when both are available", async () => {
+  it("prefers a saved transcript over the video when both are available", async () => {
     const transcriptFile = "/records/live.transcript.txt";
     mocks.queryRecord.mockReturnValue({
       id: 108,
@@ -286,8 +290,75 @@ describe("LiveSummaryTask", () => {
 
     await expect((task as any).run()).resolves.toBeUndefined();
 
-    expect(mocks.createASRProvider).toHaveBeenCalledWith("asr-1");
-    expect(mocks.spawn).toHaveBeenCalled();
-    expect(mocks.readFile).not.toHaveBeenCalled();
+    expect(mocks.createASRProvider).not.toHaveBeenCalled();
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    expect(mocks.readFile).toHaveBeenCalledWith(transcriptFile, "utf8");
+  });
+
+  it("reuses an existing whole-session transcript even when the session still has videos", async () => {
+    const transcriptFile = "/records/live.session.transcript.txt";
+    const targetRecord = {
+      id: 108,
+      streamer_id: 1,
+      live_id: "live-1",
+      record_start_time: 1781105107602,
+      title: "直播标题",
+      video_file: "/records/live.flv",
+    };
+    mocks.queryRecord.mockReturnValue(targetRecord);
+    mocks.listSameLiveRecords.mockReturnValue([targetRecord]);
+    mocks.pathExists.mockResolvedValue(true);
+    mocks.getEnabledSummaryExportTargetNames.mockReturnValue([]);
+
+    const task = new LiveSummaryTask({
+      recordId: 108,
+      videoFile: "/records/live.flv",
+      transcriptFile,
+      summaryMode: "session",
+      title: "直播标题",
+      streamer: "主播",
+      roomId: "123",
+      platform: "Bilibili",
+      recordStartTime: 1781105107602,
+    });
+
+    await expect((task as any).run()).resolves.toBeUndefined();
+
+    expect(mocks.createASRProvider).not.toHaveBeenCalled();
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    expect(mocks.readFile).toHaveBeenCalledWith(transcriptFile, "utf8");
+  });
+
+  it("persists the ASR checkpoint before calling the LLM", async () => {
+    mocks.getEnabledSummaryExportTargetNames.mockReturnValue([]);
+    mocks.sendMessage.mockRejectedValue(new Error("LLM 服务不可用"));
+
+    const task = new LiveSummaryTask({
+      recordId: 108,
+      videoFile: "/records/live.flv",
+      title: "直播标题",
+      streamer: "主播",
+      roomId: "123",
+      platform: "Bilibili",
+      recordStartTime: 1781105107602,
+    });
+
+    await expect((task as any).run()).rejects.toThrow("LLM 服务不可用");
+
+    const transcriptFile = "/records/live.transcript.txt";
+    expect(mocks.writeFile).toHaveBeenCalledWith(
+      transcriptFile,
+      expect.stringContaining("转写内容"),
+    );
+    expect(mocks.updateRecord).toHaveBeenCalledWith({
+      id: 108,
+      ai_transcript_file: transcriptFile,
+    });
+    const checkpointCallIndex = mocks.updateRecord.mock.calls.findIndex(
+      ([options]) => options.ai_transcript_file === transcriptFile,
+    );
+    expect(mocks.updateRecord.mock.invocationCallOrder[checkpointCallIndex]).toBeLessThan(
+      mocks.sendMessage.mock.invocationCallOrder[0],
+    );
   });
 });
