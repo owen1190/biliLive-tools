@@ -123,6 +123,20 @@ vi.mock("../../src/musicDetector/utils.js", () => ({
   getModel: mocks.getModel,
 }));
 
+vi.mock("../../src/video/douyin.js", () => ({
+  default: {
+    parseShortVideo: vi
+      .fn()
+      .mockResolvedValue({
+        awemeId: "video-1",
+        title: "视频标题",
+        sourceUrl: "https://v.douyin.com/test",
+        playUrl: "https://example.com/video.mp4",
+      }),
+    downloadFile: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 vi.mock("../../src/notify.js", () => ({
   sendNotify: mocks.sendNotify,
 }));
@@ -138,6 +152,8 @@ vi.mock("../../src/utils/log.js", () => ({
 }));
 
 import { LiveSummaryTask } from "../../src/task/liveSummary.js";
+import { OpenAICompatibleLLM } from "../../src/ai/index.js";
+import { DouyinVideoAnalysisTask } from "../../src/task/douyinVideoAnalysis.js";
 
 describe("LiveSummaryTask", () => {
   beforeEach(() => {
@@ -195,6 +211,37 @@ describe("LiveSummaryTask", () => {
         ],
       ),
     );
+  });
+
+  it("passes per-model request settings without imposing a task-specific output cap", async () => {
+    const modelConfig = { maxTokens: 14000, enableThinking: false };
+    mocks.getModel.mockReturnValue({
+      vendorId: "vendor-1",
+      modelName: "qwen",
+      config: { llm: modelConfig },
+    });
+    mocks.sendMessage.mockRejectedValue(new Error("stop after request"));
+    const task = new LiveSummaryTask({
+      recordId: 108,
+      transcriptFile: "/records/live.transcript.txt",
+    });
+    await expect((task as any).run()).rejects.toThrow("stop after request");
+    expect(OpenAICompatibleLLM).toHaveBeenCalledWith(expect.objectContaining({ modelConfig }));
+    expect(mocks.sendMessage.mock.calls[0][2]).not.toHaveProperty("maxTokens");
+  });
+
+  it("uses the same per-model settings for Douyin analysis without the old 2500-token cap", async () => {
+    const modelConfig = { maxTokens: 14000, enableThinking: false };
+    mocks.getModel.mockReturnValue({
+      vendorId: "vendor-1",
+      modelName: "qwen",
+      config: { llm: modelConfig },
+    });
+    const task = new DouyinVideoAnalysisTask({ url: "https://v.douyin.com/test" });
+    await (task as any).run();
+    expect(OpenAICompatibleLLM).toHaveBeenCalledWith(expect.objectContaining({ modelConfig }));
+    expect(mocks.sendMessage.mock.calls[0][2]).not.toHaveProperty("maxTokens");
+    expect((task.output as any).summary).toBe("总结内容");
   });
 
   it("still sends notifications with successful export links when another target fails", async () => {

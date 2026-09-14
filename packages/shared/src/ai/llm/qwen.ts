@@ -2,6 +2,11 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { Stream } from "openai/streaming";
 import logger from "../../utils/log.js";
+import {
+  normalizeLLMModelConfig,
+  resolveLLMThinkingParams,
+  type LLMModelConfig,
+} from "./config.js";
 
 export type OpenAICompatibleProvider = "aliyun" | "openai" | "openai-compatible";
 
@@ -28,13 +33,18 @@ export interface OpenAICompatibleLLMConfig {
    * 请求超时时间（毫秒）
    */
   timeout?: number;
+  /** Saved per-model request defaults, shared by all LLM tasks. */
+  modelConfig?: LLMModelConfig;
 }
 
 export interface QwenConfig extends Omit<OpenAICompatibleLLMConfig, "provider"> {}
 
-export function resolveOpenAICompatibleBaseURL(config: Pick<OpenAICompatibleLLMConfig, "provider" | "baseURL">) {
+export function resolveOpenAICompatibleBaseURL(
+  config: Pick<OpenAICompatibleLLMConfig, "provider" | "baseURL">,
+) {
   if (config.baseURL) return config.baseURL;
-  if (!config.provider || config.provider === "aliyun") return "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  if (!config.provider || config.provider === "aliyun")
+    return "https://dashscope.aliyuncs.com/compatible-mode/v1";
   return undefined;
 }
 
@@ -51,7 +61,7 @@ export interface ChatOptions {
    */
   topP?: number;
   /**
-   * 最大输出 token 数
+   * 最大输出 token 数。不设置时使用模型配置或供应商默认值。
    */
   maxTokens?: number;
   /**
@@ -73,9 +83,11 @@ export interface ChatOptions {
   enableSearch?: boolean;
 
   /**
-   * 是否开启“思考”模式（阿里云特有参数）
+   * 是否开启“思考”模式（支持阿里云和 DeepSeek 官方端点）
    */
   enableThinking?: boolean;
+  /** Advanced provider-specific request body fields. Cannot override model/messages/stream. */
+  extraBody?: Record<string, unknown>;
 
   searchOptions?: {
     /**
@@ -106,10 +118,12 @@ export class OpenAICompatibleLLM {
   private model: string;
   private provider: OpenAICompatibleProvider;
   private baseURL?: string;
+  private modelConfig: LLMModelConfig;
 
   constructor(config: OpenAICompatibleLLMConfig) {
     this.provider = config.provider || "openai-compatible";
     this.baseURL = resolveOpenAICompatibleBaseURL(config);
+    this.modelConfig = normalizeLLMModelConfig(config.modelConfig);
     if (this.provider === "openai-compatible" && !this.baseURL) {
       throw new Error("OpenAI 兼容供应商需要配置 Base URL");
     }
@@ -140,20 +154,17 @@ export class OpenAICompatibleLLM {
     options: ChatOptions = {},
   ): Promise<ChatResponse | Stream<OpenAI.Chat.Completions.ChatCompletionChunk>> {
     const startedAt = Date.now();
-    const logContext = {
-      provider: this.provider,
-      model: this.model,
-      baseURL: this.baseURL,
-      stream: options.stream === true,
-      messageCount: messages.length,
-      inputLength: messages.reduce((total, message) => total + message.content.length, 0),
-    };
+    const modelOptions = normalizeLLMModelConfig({
+      maxTokens: options.maxTokens ?? this.modelConfig.maxTokens,
+      enableThinking: options.enableThinking ?? this.modelConfig.enableThinking,
+      extraBody: { ...this.modelConfig.extraBody, ...options.extraBody },
+    });
     const params = {
       model: this.model,
       messages: messages as ChatCompletionMessageParam[],
       temperature: options.temperature ?? 0.7,
       top_p: options.topP,
-      max_tokens: options.maxTokens,
+      max_tokens: modelOptions.maxTokens,
       stop: options.stop,
       presence_penalty: options.presencePenalty,
       response_format: options.responseFormat,
@@ -164,9 +175,27 @@ export class OpenAICompatibleLLM {
       ...(options.searchOptions !== undefined && {
         search_options: options.searchOptions,
       }),
-      ...(options.enableThinking !== undefined && {
-        enable_thinking: options.enableThinking,
-      }),
+      ...resolveLLMThinkingParams(this.provider, this.baseURL, modelOptions.enableThinking),
+      // Advanced fields override ordinary generation parameters, but not request identity.
+      ...modelOptions.extraBody,
+    };
+
+    const tokenField =
+      modelOptions.extraBody?.max_completion_tokens !== undefined
+        ? "max_completion_tokens"
+        : "max_tokens";
+    const maxTokens = modelOptions.extraBody?.[tokenField] ?? modelOptions.maxTokens;
+    const logContext = {
+      provider: this.provider,
+      model: this.model,
+      baseURL: this.baseURL,
+      stream: options.stream === true,
+      messageCount: messages.length,
+      inputLength: messages.reduce((total, message) => total + message.content.length, 0),
+      maxTokens,
+      tokenField,
+      enableThinking: modelOptions.enableThinking,
+      extraBodyKeys: Object.keys(modelOptions.extraBody || {}),
     };
 
     logger.info("开始请求 LLM", logContext);
@@ -196,13 +225,32 @@ export class OpenAICompatibleLLM {
           usage: completion.usage,
           finishReason: completion.choices[0].finish_reason,
         };
+        const message = completion.choices[0]
+          .message as OpenAI.Chat.Completions.ChatCompletionMessage & {
+          reasoning_content?: string | null;
+        };
+        const reasoningTokens = completion.usage?.completion_tokens_details?.reasoning_tokens;
         logger.info("LLM 请求完成", {
           ...logContext,
           durationMs: Date.now() - startedAt,
           finishReason: response.finishReason,
           outputLength: response.content.length,
+          reasoningLength: message.reasoning_content?.length || 0,
+          reasoningTokens,
           usage: response.usage,
         });
+        if (response.finishReason === "length") {
+          throw new Error(
+            `LLM 输出达到长度上限，未生成完整内容（${tokenField}=${maxTokens ?? "供应商默认"}` +
+              `${reasoningTokens !== undefined ? `，推理 tokens=${reasoningTokens}` : ""}）。` +
+              "请在模型配置中提高最大输出 tokens 或调整思考参数后重试。",
+          );
+        }
+        if (!response.content.trim()) {
+          throw new Error(
+            `LLM 未返回正文内容（finish_reason=${response.finishReason}），请重试或检查模型设置。`,
+          );
+        }
         return response;
       } catch (error) {
         logger.error("LLM 请求失败", error, logContext);

@@ -12,6 +12,7 @@ import { getModel } from "./utils.js";
 import { getTempPath, uuid, calculateFileQuickHash } from "../utils/index.js";
 
 import type { StandardASRResult } from "../ai/index.js";
+import type { LLMModelConfig } from "../ai/llm/config.js";
 export interface ProgressCallback {
   (data: { stage: string; percentage: number; message: string }): void;
 }
@@ -164,7 +165,7 @@ function getVendor(vendorId: string) {
   return vendor;
 }
 
-function createLLMClient(vendorId: string, model: string) {
+function createLLMClient(vendorId: string, model: string, modelConfig?: LLMModelConfig) {
   const vendor = getVendor(vendorId);
   if (vendor.provider === "ffmpeg") {
     throw new Error("FFmpeg 供应商不能用于 LLM 模型");
@@ -174,6 +175,7 @@ function createLLMClient(vendorId: string, model: string) {
     apiKey: vendor.apiKey,
     model,
     baseURL: vendor.baseURL,
+    modelConfig,
   });
 }
 
@@ -188,8 +190,8 @@ export async function optimizeLyrics(
   lyrics: string,
   offset: number,
 ): Promise<ASRWord[]> {
-  const { vendorId, prompt, model, enableStructuredOutput } = getLyricOptimizeConfig();
-  const llm = createLLMClient(vendorId, model);
+  const { vendorId, prompt, model, modelConfig, enableStructuredOutput } = getLyricOptimizeConfig();
+  const llm = createLLMClient(vendorId, model, modelConfig);
 
   const asrCleanedSentences: ASRWord[] = [];
   if (asrData.words && asrData.words.length !== 0) {
@@ -270,6 +272,7 @@ function getSongRecognizeConfig() {
     asrModelId,
     llmVendorId: llmVendor.id,
     llmModel: llmModel.modelName,
+    llmModelConfig: llmModel.config?.llm as LLMModelConfig | undefined,
     llmPrompt: data?.songRecognizeLlm?.prompt,
     enableSearch: data?.songRecognizeLlm?.enableSearch ?? false,
     maxInputLength: data?.songRecognizeLlm?.maxInputLength || 300,
@@ -296,6 +299,7 @@ function getLyricOptimizeConfig() {
     vendorId: vendor.id,
     prompt: data?.songLyricOptimize?.prompt,
     model: model.modelName,
+    modelConfig: model.config?.llm as LLMModelConfig | undefined,
     enableStructuredOutput: data?.songLyricOptimize?.enableStructuredOutput ?? true,
   };
 }
@@ -313,13 +317,14 @@ async function recognizeSongNameWithLLM(
   options: {
     prompt?: string;
     model: string;
+    modelConfig?: LLMModelConfig;
     enableSearch: boolean;
     maxInputLength: number;
     enableStructuredOutput: boolean;
   },
 ) {
   try {
-    const llm = createLLMClient(vendorId, options.model);
+    const llm = createLLMClient(vendorId, options.model, options.modelConfig);
 
     const truncatedText = asrText.slice(0, options.maxInputLength);
     logger.info("使用 LLM 进行歌曲名称识别...", {
@@ -369,6 +374,7 @@ export async function songRecognize(file: string, audioStartTime: number = 0) {
     llmVendorId,
     llmPrompt,
     llmModel,
+    llmModelConfig,
     enableSearch,
     maxInputLength,
     enableStructuredOutput,
@@ -405,6 +411,7 @@ export async function songRecognize(file: string, audioStartTime: number = 0) {
     info = await recognizeSongNameWithLLM(messages, llmVendorId, {
       prompt: llmPrompt,
       model: llmModel,
+      modelConfig: llmModelConfig,
       enableSearch: enableSearch,
       maxInputLength: maxInputLength,
       enableStructuredOutput: enableStructuredOutput,

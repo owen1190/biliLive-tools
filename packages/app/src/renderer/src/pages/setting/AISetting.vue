@@ -668,6 +668,7 @@
         aria-modal="true"
         class="card"
         :title="editingModelId === null ? '添加模型' : '编辑模型'"
+        content-style="max-height: 60vh; overflow-y: auto"
       >
         <n-form label-placement="left" :label-width="100">
           <n-form-item label="供应商">
@@ -697,6 +698,40 @@
           <n-form-item label="备注">
             <n-input v-model:value="editingModel.remark" placeholder="可选，用于区分多个模型" />
           </n-form-item>
+
+          <template v-if="editingModel.tags.includes('llm')">
+            <n-form-item label="最大输出 tokens">
+              <n-input-number
+                v-model:value="llmModelForm.maxTokens"
+                :min="1"
+                :precision="0"
+                :show-button="false"
+                clearable
+                placeholder="留空使用供应商默认额度"
+              />
+            </n-form-item>
+            <n-form-item label="思考模式">
+              <n-select v-model:value="llmModelForm.thinkingMode" :options="thinkingModeOptions" />
+            </n-form-item>
+            <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+              思考模型的输出额度可能同时包含推理和正文，请预留足够空间。
+              思考开关自动适配 DeepSeek、通义；其他接口请选“供应商默认”并配置高级参数。
+            </n-alert>
+            <n-collapse>
+              <n-collapse-item title="高级请求参数" name="llm-parameters">
+                <n-input
+                  v-model:value="llmModelForm.extraBodyText"
+                  type="textarea"
+                  :autosize="{ minRows: 4, maxRows: 10 }"
+                  placeholder='可选 JSON 对象，例如：{"reasoning_effort":"low"}'
+                />
+                <n-text depth="3">
+                  高级参数会覆盖普通生成参数，不允许覆盖模型名、消息或流式开关。
+                  如使用 max_tokens 或 max_completion_tokens，请留空上面的最大输出 tokens。
+                </n-text>
+              </n-collapse-item>
+            </n-collapse>
+          </template>
         </n-form>
 
         <template #footer>
@@ -714,6 +749,8 @@
 import { Add } from "@vicons/ionicons5";
 import { useConfirm } from "@renderer/hooks";
 import { uuid } from "@renderer/utils";
+import { getLLMModelForm, buildLLMModelConfig } from "@renderer/utils/llmModelConfig";
+import { resolveLLMThinkingParams } from "@biliLive-tools/shared/ai/llm/config.js";
 import type { AppConfig } from "@biliLive-tools/types";
 
 type FeishuStreamerOverride = NonNullable<
@@ -925,6 +962,12 @@ const editingVendor = ref<{
 
 // 模型编辑状态
 const modelModalVisible = ref(false);
+const llmModelForm = ref(getLLMModelForm());
+const thinkingModeOptions = [
+  { label: "供应商默认", value: "default" },
+  { label: "开启", value: "enabled" },
+  { label: "关闭", value: "disabled" },
+];
 const editingModelId = ref<string | null>(null);
 const editingModel = ref<{
   vendorId: string;
@@ -1023,6 +1066,7 @@ const saveVendor = () => {
 // 模型管理方法
 const addModel = () => {
   editingModelId.value = null;
+  llmModelForm.value = getLLMModelForm();
   editingModel.value = {
     vendorId: "",
     modelName: "",
@@ -1037,6 +1081,12 @@ const editModel = (id: string) => {
   editingModelId.value = id;
   const model = config.value.ai.models.find((m) => m.modelId === id);
   if (!model) return;
+  try {
+    llmModelForm.value = getLLMModelForm(model.config || {});
+  } catch (error) {
+    notice.error(error instanceof Error ? error.message : "LLM 模型配置无效");
+    return;
+  }
   editingModel.value = {
     vendorId: model.vendorId,
     modelName: model.modelName,
@@ -1074,13 +1124,26 @@ const saveModel = () => {
     return;
   }
 
+  let modelConfig = editingModel.value.config || {};
+  if (editingModel.value.tags.includes("llm")) {
+    try {
+      modelConfig = buildLLMModelConfig(modelConfig, llmModelForm.value);
+      const vendor = config.value.ai.vendors.find((v) => v.id === editingModel.value.vendorId);
+      if (!vendor) throw new Error("找不到模型关联的供应商");
+      resolveLLMThinkingParams(vendor.provider, vendor.baseURL, modelConfig.llm?.enableThinking);
+    } catch (error) {
+      notice.error(error instanceof Error ? error.message : "LLM 模型配置无效");
+      return;
+    }
+  }
+
   const modelData = {
     modelId: editingModelId.value || uuid(),
     vendorId: editingModel.value.vendorId,
     modelName: editingModel.value.modelName,
     remark: editingModel.value.remark || undefined,
     tags: editingModel.value.tags,
-    config: editingModel.value.config,
+    config: modelConfig,
   };
 
   if (editingModelId.value === null) {

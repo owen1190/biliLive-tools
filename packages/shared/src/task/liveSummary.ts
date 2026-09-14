@@ -201,6 +201,7 @@ async function createSummary(input: {
     baseURL: vendor.baseURL,
     model: model.modelName,
     timeout: 120000,
+    modelConfig: model.config?.llm,
   });
 
   const maxInputLength = summaryConfig.maxInputLength || 24000;
@@ -238,7 +239,6 @@ ${transcript}`,
     summaryPrompt,
     {
       temperature: 0.2,
-      maxTokens: 3000,
     },
   );
 

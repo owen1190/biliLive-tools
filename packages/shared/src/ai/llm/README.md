@@ -78,15 +78,47 @@ for await (const chunk of stream) {
 
 ### ChatOptions
 
-| 参数            | 类型               | 默认值 | 说明                        |
-| --------------- | ------------------ | ------ | --------------------------- |
-| temperature     | number             | 0.7    | 采样温度，控制随机性 [0, 2) |
-| topP            | number             | -      | 核采样概率阈值 (0, 1.0]     |
-| maxTokens       | number             | -      | 最大输出 token 数           |
-| stream          | boolean            | false  | 是否流式输出                |
-| stop            | string \| string[] | -      | 停止词                      |
-| presencePenalty | number             | -      | 内容重复度 [-2.0, 2.0]      |
-| enableSearch    | boolean            | false  | 是否开启联网搜索            |
+| 参数            | 类型               | 默认值     | 说明                                      |
+| --------------- | ------------------ | ---------- | ----------------------------------------- |
+| temperature     | number             | 0.7        | 采样温度，控制随机性 [0, 2)               |
+| topP            | number             | -          | 核采样概率阈值 (0, 1.0]                   |
+| maxTokens       | number             | -          | 最大输出 token 数                         |
+| stream          | boolean            | false      | 是否流式输出                              |
+| stop            | string \| string[] | -          | 停止词                                    |
+| presencePenalty | number             | -          | 内容重复度 [-2.0, 2.0]                    |
+| enableSearch    | boolean            | false      | 是否开启联网搜索                          |
+| enableThinking  | boolean            | 供应商默认 | 是否开启思考（阿里云、DeepSeek 官方端点） |
+| extraBody       | object             | -          | 供应商特有的高级请求参数                  |
+
+### 通用模型配置
+
+在 AI 设置的“编辑模型”中，为 LLM 配置最大输出 tokens、思考模式和高级请求参数。配置保存在 `model.config.llm`，直播总结、抖音分析、歌曲识别、歌词优化统一读取；不再设置任务或供应商专属的固定输出额度。
+
+```typescript
+model.config.llm = {
+  maxTokens: 16000,
+  enableThinking: false,
+};
+```
+
+最大输出 tokens 留空时，不发送 `max_tokens`，使用供应商默认额度；填写后严格使用该正整数，不会自动提高或降低。思考模型的额度通常同时覆盖推理与最终正文，应按模型需要预留空间。旧配置无需迁移，未配置的字段继续使用供应商默认值。
+
+思考模式“供应商默认”不发送开关；DeepSeek 官方端点自动使用 `thinking: { type: "enabled/disabled" }`，通义默认接口及已识别的通义兼容端点使用 `enable_thinking`。未知接口不会猜测参数：请选择“供应商默认”，通过高级参数填写接口支持的开关或思考强度。
+
+例如，其他兼容接口支持 `reasoning_effort` 和 `max_completion_tokens` 时，可留空最大输出 tokens，在高级请求参数中填写：
+
+```json
+{
+  "reasoning_effort": "low",
+  "max_completion_tokens": 16000
+}
+```
+
+高级参数必须是 JSON 对象，会覆盖普通生成参数，但不能覆盖 `model`、`messages`、`stream`、凭证或基础地址字段。最大输出 tokens、`max_tokens`、`max_completion_tokens` 只能选一种，重复配置会在保存或发起请求前报错。
+
+直接使用 `OpenAICompatibleLLM` 时，可将相同配置传入构造参数的 `modelConfig`；单次调用的 `maxTokens`、`enableThinking` 优先于模型默认值，高级参数按字段合并并最终覆盖普通参数。
+
+非流式请求遇到 `finish_reason: "length"` 或空正文时会抛出明确错误，避免把截断结果作为完整总结。日志仅记录推理长度和 token 数，不记录推理正文。
 
 ## 高级功能
 

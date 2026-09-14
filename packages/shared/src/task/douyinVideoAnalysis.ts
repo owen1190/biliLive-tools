@@ -197,6 +197,7 @@ async function createSummary(input: {
     baseURL: vendor.baseURL,
     model: model.modelName,
     timeout: 120000,
+    modelConfig: model.config?.llm,
   });
 
   const maxInputLength = summaryConfig.maxInputLength || 24000;
@@ -230,7 +231,6 @@ ${transcript}`,
     buildPrompt(input.customPrompt),
     {
       temperature: 0.2,
-      maxTokens: 2500,
     },
   );
 
@@ -240,7 +240,9 @@ ${transcript}`,
   return response.content;
 }
 
-function buildAnalysisMarkdown(output: Omit<DouyinVideoAnalysisOutput, "markdown" | "documentFile">) {
+function buildAnalysisMarkdown(
+  output: Omit<DouyinVideoAnalysisOutput, "markdown" | "documentFile">,
+) {
   const meta = [
     `- 来源链接：${output.sourceUrl}`,
     output.videoInfo.author ? `- 作者：${output.videoInfo.author}` : "",
